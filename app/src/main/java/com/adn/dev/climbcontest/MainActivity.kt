@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -14,8 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.adn.dev.climbcontest.ui.theme.ClimbContestTheme
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -27,6 +32,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONObject
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -35,7 +47,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var scanner: GmsBarcodeScanner
     private var climberId: String? = null
     private var blocId: String? = null
-    private var coupleId: String = UUID.randomUUID().toString()
+    private var uuid: String = UUID.randomUUID().toString()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,7 +56,11 @@ class MainActivity : ComponentActivity() {
             ClimbContestTheme {
                 MainScreen(
                     onScanClimber = { startScanning("Climber") },
-                    onScanBloc = { startScanning("Bloc") })
+                    onScanBloc = { startScanning("Bloc") },
+                    onReset = { resetValues() },
+                    climberId = climberId,
+                    blocId = blocId
+                )
             }
         }
 
@@ -64,10 +80,7 @@ class MainActivity : ComponentActivity() {
         scanner.startScan()
             .addOnSuccessListener { barcode ->
                 val scannedValue = barcode.displayValue ?: "Unknown"
-                when (scanType) {
-                    "Climber" -> handleScannedValue("Climber", scannedValue)
-                    "Bloc" -> handleScannedValue("Bloc", scannedValue)
-                }
+                handleScannedValue(scanType, scannedValue)
             }
             .addOnFailureListener { e ->
                 e.printStackTrace()
@@ -81,63 +94,115 @@ class MainActivity : ComponentActivity() {
             withContext(Dispatchers.Main) {
                 if (isAccepted) {
                     when (scanType) {
-                        "Climber" -> {
-                            climberId = scannedValue
-                            Toast.makeText(this@MainActivity, "Climber ID accepted", Toast.LENGTH_SHORT).show()
-                        }
-                        "Bloc" -> {
-                            blocId = scannedValue
-                            Toast.makeText(this@MainActivity, "Bloc ID accepted", Toast.LENGTH_SHORT).show()
-                        }
+                        "Climber" -> climberId = scannedValue
+                        "Bloc" -> blocId = scannedValue
                     }
+                    Toast.makeText(this@MainActivity, "$scanType ID $scannedValue accepted", Toast.LENGTH_SHORT).show()
                     checkCompletion()
                 } else {
-                    Toast.makeText(this@MainActivity, "$scanType ID rejected. Please scan again.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "$scanType ID $scannedValue rejected. Please scan again.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
-    private suspend fun sendToServer(scanType: String, scannedValue: String): Boolean {
-        // Mocked API request and response
-        // Replace with actual HTTP POST logic using libraries like Retrofit or OkHttp
-        delay(1000) // Simulate network delay
-        return true // Assume server responds with `true` for successful handling
+    private fun sendToServer(scanType: String, scannedValue: String): Boolean {
+        val url = "http://192.168.0.36:5000/api/v1/contest/$scanType"
+
+        // Create JSON payload
+        val payload = JSONObject().apply {
+            put("id", scannedValue)
+            put("uuid", uuid) // Use the generated UUID for the transaction
+        }
+
+        // Convert payload to JSON string and create request body
+        val requestBody: RequestBody = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
+
+        // Build the HTTP request
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .build()
+
+        // Execute the request
+        val client = OkHttpClient()
+        return try {
+            client.newCall(request).execute().use { response: Response ->
+                if (response.isSuccessful) {
+                    val responseBody = response.body?.string()
+                    responseBody?.let {
+                        // Parse the response and check for "true" in response
+                        JSONObject(it).optBoolean("success", false)
+                    } ?: false
+                } else {
+                    false // Handle unsuccessful response
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false // Handle exceptions (e.g., network errors)
+        }
     }
 
-    private fun checkCompletion() {
+    private suspend fun checkCompletion() {
         if (climberId != null && blocId != null) {
-            Toast.makeText(
-                this,
-                "Climber and Bloc successfully registered. Generating new couple ID...",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "Climber and Bloc successfully registered.",Toast.LENGTH_SHORT).show()
 
             // Reset state and generate new couple ID
-            climberId = null
-            blocId = null
-            coupleId = UUID.randomUUID().toString()
+            delay(2000)
+            resetValues()
         }
+    }
+
+    private fun resetValues() {
+        climberId = null
+        blocId = null
+        uuid = UUID.randomUUID().toString()
     }
 }
 
 @Composable
-fun MainScreen(onScanClimber: () -> Unit, onScanBloc: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Button(onClick = onScanClimber) {
+fun MainScreen(onScanClimber: () -> Unit,
+               onScanBloc: () -> Unit,
+               onReset: () -> Unit,
+               climberId: String?,
+               blocId: String?) {
+    val climberButtonColor = if (climberId != null) Color.Green else Color.Gray
+    val blocButtonColor = if (blocId != null) Color.Green else Color.Gray
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp),
+           verticalArrangement = Arrangement.Center,
+           horizontalAlignment = Alignment.CenterHorizontally) {
+        Button(onClick = onScanClimber,
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = climberButtonColor)) {
             Text("Grimpeur")
+        }
+
+        if (climberId != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = "Climber ID: $climberId")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Button(onClick = onScanBloc) {
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = onScanBloc,
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = blocButtonColor)) {
             Text("Bloc")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (blocId != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(text = "Bloc ID: $blocId")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(onClick = onReset) {
+            Text("Reset")
         }
     }
 }
