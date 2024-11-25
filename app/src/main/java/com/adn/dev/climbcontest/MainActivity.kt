@@ -5,7 +5,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -15,9 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -55,8 +51,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             ClimbContestTheme {
                 MainScreen(
-                    onScanClimber = { startScanning("Climber") },
-                    onScanBloc = { startScanning("Bloc") },
+                    onScanClimber = { startScanning("climber") },
+                    onScanBloc = { startScanning("bloc") },
                     onReset = { resetValues() },
                     climberId = climberId,
                     blocId = blocId
@@ -94,8 +90,8 @@ class MainActivity : ComponentActivity() {
             withContext(Dispatchers.Main) {
                 if (isAccepted) {
                     when (scanType) {
-                        "Climber" -> climberId = scannedValue
-                        "Bloc" -> blocId = scannedValue
+                        "climber" -> climberId = scannedValue
+                        "bloc" -> blocId = scannedValue
                     }
                     Toast.makeText(this@MainActivity, "$scanType ID $scannedValue accepted", Toast.LENGTH_SHORT).show()
                     checkCompletion()
@@ -107,7 +103,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun sendToServer(scanType: String, scannedValue: String): Boolean {
-        val url = "http://192.168.0.36:5000/api/v1/contest/$scanType"
+        val url = "http://192.168.0.36:5007/api/v1/contest/$scanType"
 
         // Create JSON payload
         val payload = JSONObject().apply {
