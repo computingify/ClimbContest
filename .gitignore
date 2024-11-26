@@ -14,3 +14,4 @@ app/release/*
 .cxx
 local.properties
 /app/release/app-release.apk
+/app/src/main/res/raw/cert.pem

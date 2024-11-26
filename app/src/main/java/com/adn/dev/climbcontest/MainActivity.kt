@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,14 +50,11 @@ class MainActivity : ComponentActivity() {
 
     // Define the scanner as a class member
     private lateinit var scanner: GmsBarcodeScanner
-    private var climberId: String? = null
-    private var blocId: String? = null
-    private var uuid: String = UUID.randomUUID().toString()
+    private val mainViewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val mainViewModel: MainViewModel by viewModels()
 
         setContent {
             ClimbContestTheme {
@@ -63,9 +62,7 @@ class MainActivity : ComponentActivity() {
                     viewModel = mainViewModel,
                     onScanClimber = { startScanning("climber") },
                     onScanBloc = { startScanning("bloc") },
-                    onReset = { resetValues() },
-                    climberId = climberId,
-                    blocId = blocId
+                    onReset = { mainViewModel.reset() }
                 )
             }
         }
@@ -83,8 +80,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startScanning(scanType: String) {
-        //handleScannedValue(scanType, "") // Todo: to be deleted
-        //return
+        handleScannedValue(scanType, "") // Todo: to be deleted
+        return
         scanner.startScan()
             .addOnSuccessListener { barcode ->
                 val scannedValue = barcode.displayValue ?: "Unknown"
@@ -98,33 +95,34 @@ class MainActivity : ComponentActivity() {
 
     private fun handleScannedValue(scanType: String, scannedValue: String) {
         CoroutineScope(Dispatchers.IO).launch {
+            var localScannedValue = scannedValue
             // TODO: should be delete
-            //var isAccepted = false
-            //when (scanType) {
-            //    "climber" -> isAccepted = sendToServer(scanType,  "Adrien Jouve")
-            //    "bloc" -> {
-            //        val randomBlocId = (1..20).random()
-            //        isAccepted = sendToServer(scanType, randomBlocId.toString())
-            //    }
-            //}
+            when (scanType) {
+                "climber" -> {
+                    localScannedValue = "Adrien Jouve"
+                }
+                "bloc" -> {
+                    localScannedValue = (1..20).random().toString()
+                }
+            }
             // TODO: delete to here
-            val isAccepted = sendToServer(scanType, scannedValue)
+            val isAccepted = sendToServer(scanType, localScannedValue, mainViewModel.uuid.value)
             withContext(Dispatchers.Main) {
                 if (isAccepted) {
                     when (scanType) {
-                        "climber" -> climberId = scannedValue
-                        "bloc" -> blocId = scannedValue
+                        "climber" -> mainViewModel.setClimberId(localScannedValue)
+                        "bloc" -> mainViewModel.setBlocId(localScannedValue)
                     }
-                    Toast.makeText(this@MainActivity, "$scanType ID $scannedValue accepted", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "$scanType ID $localScannedValue accepted", Toast.LENGTH_SHORT).show()
                     checkCompletion()
                 } else {
-                    Toast.makeText(this@MainActivity, "$scanType ID $scannedValue rejected. Please scan again.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "$scanType ID $localScannedValue rejected. Please scan again.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
     }
 
-    private fun sendToServer(scanType: String, scannedValue: String): Boolean {
+    private fun sendToServer(scanType: String, scannedValue: String, uuid: String): Boolean {
         val url = "https://10.0.2.2:5007/api/v1/contest/$scanType"
 
         // Create JSON payload
@@ -194,19 +192,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun checkCompletion() {
-        if (climberId != null && blocId != null) {
+        if (mainViewModel.climberId.value != null && mainViewModel.blocId.value != null) {
             Toast.makeText(this, "Climber and Bloc successfully registered.",Toast.LENGTH_SHORT).show()
 
-            // Reset state and generate new couple ID
             delay(2000)
-            resetValues()
+            // Reset state and generate new couple ID
+            mainViewModel.reset()
         }
-    }
-
-    private fun resetValues() {
-        climberId = null
-        blocId = null
-        uuid = UUID.randomUUID().toString()
     }
 }
 
@@ -214,9 +206,10 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(viewModel: MainViewModel,
                onScanClimber: () -> Unit,
                onScanBloc: () -> Unit,
-               onReset: () -> Unit,
-               climberId: String?,
-               blocId: String?) {
+               onReset: () -> Unit) {
+
+    val climberId by viewModel.climberId.collectAsState()
+    val blocId by viewModel.blocId.collectAsState()
 
     val climberButtonColor = if (climberId != null) Color.Green else Color.Gray
     val blocButtonColor = if (blocId != null) Color.Green else Color.Gray
