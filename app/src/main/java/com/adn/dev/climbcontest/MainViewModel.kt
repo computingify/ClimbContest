@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import java.util.UUID
 
 class MainViewModel : ViewModel() {
-    private val _serverAddress = MutableStateFlow("192.168.245.79")
+    private val _serverAddress = MutableStateFlow("192.168.0.10")
     val serverAddress: StateFlow<String> = _serverAddress
 
     private val _climberId = MutableStateFlow<String?>(null)

@@ -7,13 +7,17 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -31,6 +35,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,13 +106,24 @@ class MainActivity : ComponentActivity() {
                 onBack = { isSettingsScreen = false }
             )
         } else {
-            MainScreen(
-                viewModel = mainViewModel,
-                onScanClimber = { startScanning("climber") },
-                onScanBloc = { startScanning("bloc") },
-                onReset = { mainViewModel.reset() },
-                onOpenSettings = { isSettingsScreen = true }
-            )
+            Box(
+                modifier = Modifier.fillMaxSize() // Make the box take the full screen size
+            ) {
+                // Background Image
+                Image(
+                    painter = painterResource(id = R.drawable.background_image), // Replace with your image name
+                    contentDescription = "Background Image",
+                    contentScale = ContentScale.Crop, // Adjust how the image is scaled
+                    modifier = Modifier.fillMaxSize() // Make the image cover the full screen
+                )
+                MainScreen(
+                    viewModel = mainViewModel,
+                    onScanClimber = { startScanning("climber") },
+                    onScanBloc = { startScanning("bloc") },
+                    onReset = { mainViewModel.reset() },
+                    onOpenSettings = { isSettingsScreen = true }
+                )
+            }
         }
 
         // Set the barcode format to detect only QR Code, and enable the automatic zoom
@@ -315,6 +332,16 @@ fun MainScreen(viewModel: MainViewModel,
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("") },
+            navigationIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.annonay_escalade_logo),
+                    contentDescription = stringResource(R.string.app_logo),
+                    tint = Color.Unspecified,
+                    modifier = Modifier
+                        .padding(start = 10.dp)
+                        .size(100.dp)
+                )
+            },
             actions = {
                 IconButton(
                     onClick = onOpenSettings,
@@ -347,7 +374,13 @@ fun MainScreen(viewModel: MainViewModel,
 
             if (climberName != null) {
                 Spacer(modifier = Modifier.height(button_info_space_size.dp))
-                Text(stringResource(R.string.climber) + ": $climberName", fontSize = info_text_size.sp)
+                Text(
+                    stringResource(R.string.climber) + ": $climberName",
+                    fontSize = info_text_size.sp,
+                    modifier = Modifier
+                        .background(Color.LightGray) // Set your background color here
+                        .padding(6.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(spacer_size.dp))
@@ -364,7 +397,13 @@ fun MainScreen(viewModel: MainViewModel,
 
             if (blocName != null) {
                 Spacer(modifier = Modifier.height(button_info_space_size.dp))
-                Text(stringResource(R.string.block) + ": $blocName", fontSize = info_text_size.sp)
+                Text(
+                    stringResource(R.string.block) + ": $blocName",
+                    fontSize = info_text_size.sp,
+                    modifier = Modifier
+                        .background(Color.LightGray) // Set your background color here
+                        .padding(6.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height((spacer_size*4).dp))

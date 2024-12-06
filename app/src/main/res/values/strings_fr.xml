@@ -7,4 +7,5 @@
     <string name="id_accepted">%1$s Identifiant %2$s valide</string>
     <string name="id_rejected_please_scan_again">%1$s Identifiant %2$s incorrect. Recommencez.</string>
     <string name="climber_and_bloc_successfully_registered">Validé</string>
+    <string name="app_logo">Application logo</string>
 </resources>
