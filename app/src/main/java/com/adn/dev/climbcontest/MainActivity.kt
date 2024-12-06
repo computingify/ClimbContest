@@ -65,7 +65,7 @@ import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlin.random.Random
 
-const val RUN_ON_EMULATOR = 1
+const val RUN_ON_EMULATOR = 0
 
 class MainActivity : ComponentActivity() {
 
