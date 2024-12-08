@@ -1,9 +1,14 @@
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.adn.dev.climbcontest.R
 
 @Composable
 fun SettingsScreen(
@@ -12,6 +17,11 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     var address by remember { mutableStateOf(currentAddress) }
+
+    // Handle the Android back button
+    BackHandler {
+        onBack()
+    }
 
     Column(
         modifier = Modifier
@@ -27,20 +37,23 @@ fun SettingsScreen(
         OutlinedTextField(
             value = address,
             onValueChange = { address = it },
-            label = { Text("Server Address") },
+            label = { Text(stringResource(R.string.server_address)) },
             modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Button(onClick = { onAddressChange(address) }) {
-            Text("Save")
+        Button(onClick = {
+            onAddressChange(address)
+            onBack()
+        }) {
+            Text(stringResource(R.string.save))
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(onClick = onBack) {
-            Text("Back")
+            Text(stringResource(R.string.back))
         }
     }
 }

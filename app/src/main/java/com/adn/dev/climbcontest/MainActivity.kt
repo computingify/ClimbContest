@@ -65,7 +65,7 @@ import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlin.random.Random
 
-const val RUN_ON_EMULATOR = 0
+const val RUN_ON_EMULATOR = 1
 
 class MainActivity : ComponentActivity() {
 
@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
                     viewModel = mainViewModel,
                     onScanClimber = { startScanning("climber") },
                     onScanBloc = { startScanning("bloc") },
+                    onSubmit = { submit() },
                     onReset = { mainViewModel.reset() },
                     onOpenSettings = { isSettingsScreen = true }
                 )
@@ -139,63 +140,165 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startScanning(scanType: String) {
-        if (1 == RUN_ON_EMULATOR) {
-            handleScannedValue(scanType, "")
-            return
+        if (("climber" == scanType && null == mainViewModel.climberId.value)
+            || ("bloc" == scanType && null == mainViewModel.blocId.value)
+        ) {
+            if (1 == RUN_ON_EMULATOR) {
+                handleScannedValue(scanType, "")
+                return
+            }
+            scanner.startScan()
+                .addOnSuccessListener { barcode ->
+                    val scannedValue = barcode.displayValue ?: "Unknown"
+                    handleScannedValue(scanType, scannedValue)
+                }
+                .addOnFailureListener { e ->
+                    e.printStackTrace()
+                    Toast.makeText(
+                        this,
+                        getString(R.string.failed_to_scan, e.message), Toast.LENGTH_SHORT
+                    ).show()
+                }
         }
-        scanner.startScan()
-            .addOnSuccessListener { barcode ->
-                val scannedValue = barcode.displayValue ?: "Unknown"
-                handleScannedValue(scanType, scannedValue)
-            }
-            .addOnFailureListener { e ->
-                e.printStackTrace()
-                Toast.makeText(this,
-                    getString(R.string.failed_to_scan, e.message), Toast.LENGTH_SHORT).show()
-            }
     }
 
     private fun handleScannedValue(scanType: String, scannedValue: String) {
         CoroutineScope(Dispatchers.IO).launch {
             var localScannedValue = scannedValue
-            if (("climber" == scanType && null == mainViewModel.climberId.value)
-                || ("bloc" == scanType && null == mainViewModel.blocId.value)
-            ) {
-                if (1 == RUN_ON_EMULATOR) {
-                    when (scanType) {
-                        "climber" -> {
-                            localScannedValue = (1..84).random().toString()
-                        }
+            if (1 == RUN_ON_EMULATOR) {
+                when (scanType) {
+                    "climber" -> {
+                        localScannedValue = (1..84).random().toString()
+                        localScannedValue = "1"
+                    }
 
-                        "bloc" -> {
-                            localScannedValue = (Random.nextInt(
-                                from = 'A'.code,
-                                until = 'N'.code + 1
-                            )).toChar() + (1..5).random().toString()
-                        }
+                    "bloc" -> {
+                        localScannedValue = (Random.nextInt(
+                            from = 'A'.code,
+                            until = 'N'.code + 1
+                        )).toChar() + (1..5).random().toString()
+                        localScannedValue = "Z7"
                     }
                 }
-                val isAccepted = sendToServer(scanType, localScannedValue, mainViewModel.uuid.value)
-                withContext(Dispatchers.Main) {
-                    if (isAccepted) {
-                        when (scanType) {
-                            "climber" -> mainViewModel.setClimberId(localScannedValue)
-                            "bloc" -> mainViewModel.setBlocId(localScannedValue)
+            }
+            val isAccepted = checkOnServer(scanType, localScannedValue)
+            withContext(Dispatchers.Main) {
+                if (isAccepted) {
+                    when (scanType) {
+                        "climber" -> mainViewModel.setClimberId(localScannedValue)
+                        "bloc" -> mainViewModel.setBlocId(localScannedValue)
+                    }
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.id_accepted, scanType, localScannedValue),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(
+                            R.string.id_rejected_please_scan_again,
+                            scanType,
+                            localScannedValue
+                        ),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun checkOnServer(scanType: String, scannedValue: String): Boolean {
+
+        // Create JSON payload
+        val payload = JSONObject().apply {
+            put("id", scannedValue)
+        }
+
+        var uri = ""
+        when (scanType) {
+            "climber" -> uri = "climber/name"
+            "bloc" -> uri = "bloc/name"
+        }
+
+        when (val result = sendPostToServer(payload, uri)) {
+            is ServerResponse.Success -> {
+                return try {
+                    val isSuccess = result.data.optBoolean("success", false)
+                    if (isSuccess) {
+                        // Extract the "id" value from the response
+                        val id = result.data.optString("id", "")
+                        if (id != "") {
+                            when (scanType) {
+                                "climber" -> mainViewModel.setClimberName(id)
+                                "bloc" -> mainViewModel.setBlocName(id)
+                            }
                         }
+                    }
+                    isSuccess
+                } catch (jsonException: Exception) {
+                    println("JSON parsing error: ${jsonException.message}")
+                    false
+                }
+            }
+            is ServerResponse.Failure -> {
+                // Handle the failure case
+                println("Error: ${result.errorMessage}")
+                // Show error to the user or log it
+                return false
+            }
+        }
+    }
+
+    private fun submit() {
+        CoroutineScope(Dispatchers.IO).launch {
+            // Create JSON payload
+            val payload = JSONObject().apply {
+                put("bib", mainViewModel.climberId.value)
+                put("bloc", mainViewModel.blocId.value)
+            }
+
+            val uri = "success"
+
+            val result = sendPostToServer(payload, uri)
+            withContext(Dispatchers.Main) {
+                when (result) {
+                    is ServerResponse.Success -> {
+                        try {
+                            val isSuccess = result.data.optBoolean("success", false)
+                            if (isSuccess) {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    getString(R.string.climber_and_bloc_successfully_registered),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                // Delay and reset on success
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    delay(2000)
+                                    mainViewModel.reset()
+                                }
+                            } else {
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    getString(R.string.submit_failed),
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } catch (jsonException: Exception) {
+                            println("JSON parsing error: ${jsonException.message}")
+                            Toast.makeText(
+                                this@MainActivity,
+                                getString(R.string.json_parsing_error),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                    is ServerResponse.Failure -> {
+                        // Handle the failure case
+                        println("Error: ${result.errorMessage}")
                         Toast.makeText(
                             this@MainActivity,
-                            getString(R.string.id_accepted, scanType, localScannedValue),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        checkCompletion()
-                    } else {
-                        Toast.makeText(
-                            this@MainActivity,
-                            getString(
-                                R.string.id_rejected_please_scan_again,
-                                scanType,
-                                localScannedValue
-                            ),
+                            getString(R.string.network_error),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -204,19 +307,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun sendToServer(scanType: String, scannedValue: String, uuid: String): Boolean {
-        var url = ""
-        if (1 == RUN_ON_EMULATOR) {
-            url = "https://10.0.2.2:5007/api/v1/contest/$scanType"
-        } else {
-            url = "https://${mainViewModel.serverAddress.value}:5007/api/v1/contest/$scanType"
-        }
 
-        // Create JSON payload
-        val payload = JSONObject().apply {
-            put("id", scannedValue)
-            put("uuid", uuid) // Use the generated UUID for the transaction
+    private fun sendPostToServer(payload: JSONObject, requestedApi: String): ServerResponse{
+        var url = if (1 == RUN_ON_EMULATOR) {
+            "https://10.0.2.2"
+        } else {
+            "https://${mainViewModel.serverAddress.value}"
         }
+        url += ":5007/api/v2/contest/$requestedApi"
 
         // Convert payload to JSON string and create request body
         val requestBody: RequestBody = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
@@ -231,37 +329,22 @@ class MainActivity : ComponentActivity() {
         val client = createHttpClientWithSelfSignedCert()
 
         return try {
-            client.newCall(request).execute().use { response: Response ->
+            client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val responseBody = response.body?.string()
                     responseBody?.let {
                         try {
-                            val jsonResponse = JSONObject(it)
-                            val isSuccess = jsonResponse.optBoolean("success", false)
-                            if (isSuccess) {
-                                // Extract the "id" value from the response
-                                val id = jsonResponse.optString("id", "")
-                                if (id != "") {
-                                    when (scanType) {
-                                        "climber" -> mainViewModel.setClimberName(id)
-                                        "bloc" -> mainViewModel.setBlocName(id)
-                                    }
-                                }
-                            }
-                            isSuccess
+                            ServerResponse.Success(JSONObject(it))
                         } catch (jsonException: Exception) {
-                            println("JSON parsing error: ${jsonException.message}")
-                            false
+                            ServerResponse.Failure("JSON parsing error: ${jsonException.message}")
                         }
-                    } ?: false
+                    } ?: ServerResponse.Failure("Empty response body")
                 } else {
-                    println("HTTP request failed with code: ${response.code}")
-                    false
+                    ServerResponse.Failure("HTTP request failed with code: ${response.code}")
                 }
             }
         } catch (networkException: Exception) {
-            println("Network error: ${networkException.message}")
-            false
+            ServerResponse.Failure("Network error: ${networkException.message}")
         }
     }
 
@@ -294,17 +377,6 @@ class MainActivity : ComponentActivity() {
             .hostnameVerifier { _, _ -> true } // Disable hostname verification for development
             .build()
     }
-
-    private suspend fun checkCompletion() {
-        if (mainViewModel.climberId.value != null && mainViewModel.blocId.value != null) {
-            Toast.makeText(this,
-                getString(R.string.climber_and_bloc_successfully_registered),Toast.LENGTH_SHORT).show()
-
-            delay(2000)
-            // Reset state and generate new couple ID
-            mainViewModel.reset()
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -312,14 +384,15 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(viewModel: MainViewModel,
                onScanClimber: () -> Unit,
                onScanBloc: () -> Unit,
+               onSubmit: () -> Unit,
                onReset: () -> Unit,
                onOpenSettings: () -> Unit) {
 
-    val spacer_size = 45
-    val button_size = 80
-    val button_text_size = 42
-    val button_info_space_size = 8
-    val info_text_size = 20
+    val spacerSize = 45
+    val buttonSize = 80
+    val buttonTextSize = 42
+    val buttonInfoSpaceSize = 8
+    val infoTextSize = 20
 
     val climberId by viewModel.climberId.collectAsState()
     val climberName by viewModel.climberName.collectAsState()
@@ -366,55 +439,66 @@ fun MainScreen(viewModel: MainViewModel,
                 onClick = onScanClimber,
                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = climberButtonColor),
                 modifier = Modifier
-                    .height(button_size.dp) // Set button height
+                    .height(buttonSize.dp) // Set button height
                     .fillMaxWidth() // Make the button take full width
             ) {
-                Text(stringResource(R.string.climber), fontSize = button_text_size.sp)
+                Text(stringResource(R.string.climber), fontSize = buttonTextSize.sp)
             }
 
             if (climberName != null) {
-                Spacer(modifier = Modifier.height(button_info_space_size.dp))
+                Spacer(modifier = Modifier.height(buttonInfoSpaceSize.dp))
                 Text(
                     stringResource(R.string.climber) + ": $climberName",
-                    fontSize = info_text_size.sp,
+                    fontSize = infoTextSize.sp,
                     modifier = Modifier
                         .background(Color.LightGray) // Set your background color here
                         .padding(6.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(spacer_size.dp))
+            Spacer(modifier = Modifier.height(spacerSize.dp))
 
             Button(
                 onClick = onScanBloc,
                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = blocButtonColor),
                 modifier = Modifier
-                    .height(button_size.dp) // Set button height
+                    .height(buttonSize.dp) // Set button height
                     .fillMaxWidth() // Make the button take full width
             ) {
-                Text(stringResource(R.string.block), fontSize = button_text_size.sp)
+                Text(stringResource(R.string.block), fontSize = buttonTextSize.sp)
             }
 
             if (blocName != null) {
-                Spacer(modifier = Modifier.height(button_info_space_size.dp))
+                Spacer(modifier = Modifier.height(buttonInfoSpaceSize.dp))
                 Text(
                     stringResource(R.string.block) + ": $blocName",
-                    fontSize = info_text_size.sp,
+                    fontSize = infoTextSize.sp,
                     modifier = Modifier
                         .background(Color.LightGray) // Set your background color here
                         .padding(6.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height((spacer_size*4).dp))
+            Spacer(modifier = Modifier.height((spacerSize).dp))
+
+            Button(
+                onClick = onSubmit,
+                modifier = Modifier
+                    .height(buttonSize.dp) // Set button height
+                    .fillMaxWidth() // Make the button take full width
+            ) {
+                Text(stringResource(R.string.send), fontSize = buttonTextSize.sp)
+            }
+
+            Spacer(modifier = Modifier.height((spacerSize*3).dp))
 
             Button(
                 onClick = onReset,
                 modifier = Modifier
-                    .height(button_size.dp) // Set button height
+                    .height(buttonSize.dp) // Set button height
                     .fillMaxWidth() // Make the button take full width
             ) {
-                Text(stringResource(R.string.reset), fontSize = button_text_size.sp)
+                Text(stringResource(R.string.reset), fontSize = buttonTextSize.sp)
             }
         }
     }

@@ -1,11 +1,9 @@
 package com.adn.dev.climbcontest
 
 import android.content.Context
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.util.UUID
 
 class MainViewModel : ViewModel() {
     private val _serverAddress = MutableStateFlow("192.168.0.10")
@@ -22,9 +20,6 @@ class MainViewModel : ViewModel() {
 
     private val _blocName = MutableStateFlow<String?>(null)
     val blocName: StateFlow<String?> = _blocName
-
-    private val _uuid = MutableStateFlow<String>(UUID.randomUUID().toString())
-    val uuid: StateFlow<String> = _uuid
 
     fun updateServerAddress(newAddress: String) {
         _serverAddress.value = newAddress
@@ -64,6 +59,5 @@ class MainViewModel : ViewModel() {
         _climberName.value = null
         _blocId.value = null
         _blocName.value = null
-        _uuid.value = UUID.randomUUID().toString()
     }
 }
