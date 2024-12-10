@@ -41,6 +41,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adn.dev.climbcontest.ui.theme.ClimbContestTheme
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanner
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
@@ -66,6 +68,7 @@ import javax.net.ssl.X509TrustManager
 import kotlin.random.Random
 
 const val RUN_ON_EMULATOR = 1
+const val RUN_LOCAL_SERVER = 0
 
 class MainActivity : ComponentActivity() {
 
@@ -103,7 +106,8 @@ class MainActivity : ComponentActivity() {
                 onAddressChange = { newAddress ->
                     viewModel.updateServerAddress(newAddress)
                 },
-                onBack = { isSettingsScreen = false }
+                onBack = { isSettingsScreen = false },
+                this
             )
         } else {
             Box(
@@ -130,13 +134,39 @@ class MainActivity : ComponentActivity() {
         // Set the barcode format to detect only QR Code, and enable the automatic zoom
         val options = GmsBarcodeScannerOptions.Builder()
             .setBarcodeFormats(
-                Barcode.FORMAT_QR_CODE,
-                Barcode.FORMAT_AZTEC)
+                Barcode.FORMAT_QR_CODE)
             .enableAutoZoom() // available on 16.1.0 and higher
             .build()
 
         // Create scanner instance
         scanner = GmsBarcodeScanning.getClient(this, options)
+        val moduleInstallClient = ModuleInstall.getClient(this)
+        moduleInstallClient
+            .areModulesAvailable(scanner)
+            .addOnSuccessListener {
+                if (it.areModulesAvailable()) {
+                    // Modules are present on the device...
+                } else {
+                    // Modules are not present on the device...
+                    val moduleInstallRequest =
+                        ModuleInstallRequest.newBuilder()
+                            .addApi(scanner)
+                            .build()
+                    moduleInstallClient
+                        .installModules(moduleInstallRequest)
+                        .addOnSuccessListener {
+                            if (it.areModulesAlreadyInstalled()) {
+                                // Modules are already installed when the request is sent.
+                            }
+                        }
+                        .addOnFailureListener {
+                            // Handle failure…
+                        }
+                }
+            }
+            .addOnFailureListener {
+                // Handle failure...
+            }
     }
 
     private fun startScanning(scanType: String) {
@@ -168,8 +198,7 @@ class MainActivity : ComponentActivity() {
             if (1 == RUN_ON_EMULATOR) {
                 when (scanType) {
                     "climber" -> {
-                        localScannedValue = (1..84).random().toString()
-                        localScannedValue = "1"
+                        localScannedValue = (1..39).random().toString()
                     }
 
                     "bloc" -> {
@@ -177,7 +206,6 @@ class MainActivity : ComponentActivity() {
                             from = 'A'.code,
                             until = 'N'.code + 1
                         )).toChar() + (1..5).random().toString()
-                        localScannedValue = "Z7"
                     }
                 }
             }
@@ -309,7 +337,7 @@ class MainActivity : ComponentActivity() {
 
 
     private fun sendPostToServer(payload: JSONObject, requestedApi: String): ServerResponse{
-        var url = if (1 == RUN_ON_EMULATOR) {
+        var url = if (1 == RUN_LOCAL_SERVER) {
             "https://10.0.2.2"
         } else {
             "https://${mainViewModel.serverAddress.value}"

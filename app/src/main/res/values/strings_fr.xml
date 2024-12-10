@@ -15,4 +15,5 @@
     <string name="submit_failed">Erreur de dialogue avec le serveur</string>
     <string name="json_parsing_error">Le retour du serveur en format incorrecte</string>
     <string name="network_error">Aucun accès au serveur</string>
+    <string name="version">Version: %1$s</string>
 </resources>
