@@ -57,7 +57,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import org.json.JSONObject
 import java.security.KeyStore
 import java.security.cert.CertificateFactory
@@ -75,6 +74,8 @@ class MainActivity : ComponentActivity() {
     // Define the scanner as a class member
     private lateinit var scanner: GmsBarcodeScanner
     private val mainViewModel: MainViewModel by viewModels()
+    // Create a custom OkHttpClient with self-signed certificate support
+    private var client = OkHttpClient.Builder().build()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -154,19 +155,17 @@ class MainActivity : ComponentActivity() {
                             .build()
                     moduleInstallClient
                         .installModules(moduleInstallRequest)
-                        .addOnSuccessListener {
-                            if (it.areModulesAlreadyInstalled()) {
-                                // Modules are already installed when the request is sent.
-                            }
-                        }
-                        .addOnFailureListener {
-                            // Handle failure…
-                        }
+//                        .addOnSuccessListener {
+//                        }
+//                        .addOnFailureListener {
+//                            // Handle failure…
+//                        }
                 }
             }
             .addOnFailureListener {
                 // Handle failure...
             }
+        client = createHttpClientWithSelfSignedCert()
     }
 
     private fun startScanning(scanType: String) {
@@ -206,6 +205,7 @@ class MainActivity : ComponentActivity() {
                             from = 'A'.code,
                             until = 'N'.code + 1
                         )).toChar() + (1..5).random().toString()
+                        localScannedValue = "F3"
                     }
                 }
             }
@@ -352,9 +352,6 @@ class MainActivity : ComponentActivity() {
             .url(url)
             .post(requestBody)
             .build()
-
-        // Create a custom OkHttpClient with self-signed certificate support
-        val client = createHttpClientWithSelfSignedCert()
 
         return try {
             client.newCall(request).execute().use { response ->

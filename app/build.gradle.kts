@@ -11,8 +11,8 @@ android {
         applicationId = "com.adn.dev.climbcontest"
         minSdk = 29
         targetSdk = 34
-        versionCode = 3
-        versionName = "2.0.101"
+        versionCode = 4
+        versionName = "2.0.102"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
