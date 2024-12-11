@@ -66,7 +66,7 @@ import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlin.random.Random
 
-const val RUN_ON_EMULATOR = 1
+const val RUN_ON_EMULATOR = 0
 const val RUN_LOCAL_SERVER = 0
 
 class MainActivity : ComponentActivity() {
@@ -105,7 +105,12 @@ class MainActivity : ComponentActivity() {
             SettingsScreen(
                 currentAddress = viewModel.serverAddress.collectAsState().value,
                 onAddressChange = { newAddress ->
-                    viewModel.updateServerAddress(newAddress)
+                    if (isValidServerAddress(newAddress)) {
+                        viewModel.updateServerAddress(newAddress)
+                    } else {
+                        Toast.makeText(this,
+                            getString(R.string.invalid_server_address), Toast.LENGTH_SHORT).show()
+                    }
                 },
                 onBack = { isSettingsScreen = false },
                 this
@@ -401,6 +406,17 @@ class MainActivity : ComponentActivity() {
             .sslSocketFactory(sslContext.socketFactory, trustManagerFactory.trustManagers[0] as X509TrustManager)
             .hostnameVerifier { _, _ -> true } // Disable hostname verification for development
             .build()
+    }
+
+    private fun isValidServerAddress(address: String): Boolean {
+        val ipRegex = Regex(
+            """\b((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})(\.(?!$)|$)){4}\b"""
+        )
+        val urlRegex = Regex(
+            """\b(^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)+[a-zA-Z]{2,}(:\d+)?(/.*)?${'$'})?\b"""
+        )
+
+        return ipRegex.matches(address) || urlRegex.matches(address)
     }
 }
 
