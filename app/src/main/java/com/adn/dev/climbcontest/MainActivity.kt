@@ -49,24 +49,11 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.security.KeyStore
-import java.security.cert.CertificateFactory
-import java.security.cert.X509Certificate
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509TrustManager
 import kotlin.random.Random
 
-const val RUN_ON_EMULATOR = 0
+const val RUN_ON_EMULATOR = 1
 const val RUN_LOCAL_SERVER = 0
 
 class MainActivity : ComponentActivity() {
@@ -74,8 +61,7 @@ class MainActivity : ComponentActivity() {
     // Define the scanner as a class member
     private lateinit var scanner: GmsBarcodeScanner
     private val mainViewModel: MainViewModel by viewModels()
-    // Create a custom OkHttpClient with self-signed certificate support
-    private var client = OkHttpClient.Builder().build()
+    private lateinit var server : Server
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -130,7 +116,7 @@ class MainActivity : ComponentActivity() {
                     viewModel = mainViewModel,
                     onScanClimber = { startScanning("climber") },
                     onScanBloc = { startScanning("bloc") },
-                    onSubmit = { submit() },
+                    onSubmit = { server.submit() },
                     onReset = { mainViewModel.reset() },
                     onOpenSettings = { isSettingsScreen = true }
                 )
@@ -170,7 +156,8 @@ class MainActivity : ComponentActivity() {
             .addOnFailureListener {
                 // Handle failure...
             }
-        client = createHttpClientWithSelfSignedCert()
+        // Initialize the server communication object
+        server = Server(mainViewModel, this, RUN_LOCAL_SERVER)
     }
 
     private fun startScanning(scanType: String) {
@@ -214,7 +201,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            val isAccepted = checkOnServer(scanType, localScannedValue)
+            val isAccepted = server.checkOnServer(scanType, localScannedValue)
             withContext(Dispatchers.Main) {
                 if (isAccepted) {
                     when (scanType) {
@@ -239,173 +226,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun checkOnServer(scanType: String, scannedValue: String): Boolean {
-
-        // Create JSON payload
-        val payload = JSONObject().apply {
-            put("id", scannedValue)
-        }
-
-        var uri = ""
-        when (scanType) {
-            "climber" -> uri = "climber/name"
-            "bloc" -> uri = "bloc/name"
-        }
-
-        when (val result = sendPostToServer(payload, uri)) {
-            is ServerResponse.Success -> {
-                return try {
-                    val isSuccess = result.data.optBoolean("success", false)
-                    if (isSuccess) {
-                        // Extract the "id" value from the response
-                        val id = result.data.optString("id", "")
-                        if (id != "") {
-                            when (scanType) {
-                                "climber" -> mainViewModel.setClimberName(id)
-                                "bloc" -> mainViewModel.setBlocName(id)
-                            }
-                        }
-                    }
-                    isSuccess
-                } catch (jsonException: Exception) {
-                    println("JSON parsing error: ${jsonException.message}")
-                    false
-                }
-            }
-            is ServerResponse.Failure -> {
-                // Handle the failure case
-                println("Error: ${result.errorMessage}")
-                // Show error to the user or log it
-                return false
-            }
-        }
-    }
-
-    private fun submit() {
-        CoroutineScope(Dispatchers.IO).launch {
-            // Create JSON payload
-            val payload = JSONObject().apply {
-                put("bib", mainViewModel.climberId.value)
-                put("bloc", mainViewModel.blocId.value)
-            }
-
-            val uri = "success"
-
-            val result = sendPostToServer(payload, uri)
-            withContext(Dispatchers.Main) {
-                when (result) {
-                    is ServerResponse.Success -> {
-                        try {
-                            val isSuccess = result.data.optBoolean("success", false)
-                            if (isSuccess) {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    getString(R.string.climber_and_bloc_successfully_registered),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                // Delay and reset on success
-                                CoroutineScope(Dispatchers.IO).launch {
-                                    delay(2000)
-                                    mainViewModel.reset()
-                                }
-                            } else {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    getString(R.string.submit_failed),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        } catch (jsonException: Exception) {
-                            println("JSON parsing error: ${jsonException.message}")
-                            Toast.makeText(
-                                this@MainActivity,
-                                getString(R.string.json_parsing_error),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-                    is ServerResponse.Failure -> {
-                        // Handle the failure case
-                        println("Error: ${result.errorMessage}")
-                        Toast.makeText(
-                            this@MainActivity,
-                            getString(R.string.network_error),
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            }
-        }
-    }
-
-
-    private fun sendPostToServer(payload: JSONObject, requestedApi: String): ServerResponse{
-        var url = if (1 == RUN_LOCAL_SERVER) {
-            "https://10.0.2.2"
-        } else {
-            "https://${mainViewModel.serverAddress.value}"
-        }
-        url += ":5007/api/v2/contest/$requestedApi"
-
-        // Convert payload to JSON string and create request body
-        val requestBody: RequestBody = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
-
-        // Build the HTTP request
-        val request = Request.Builder()
-            .url(url)
-            .post(requestBody)
-            .build()
-
-        return try {
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
-                    responseBody?.let {
-                        try {
-                            ServerResponse.Success(JSONObject(it))
-                        } catch (jsonException: Exception) {
-                            ServerResponse.Failure("JSON parsing error: ${jsonException.message}")
-                        }
-                    } ?: ServerResponse.Failure("Empty response body")
-                } else {
-                    ServerResponse.Failure("HTTP request failed with code: ${response.code}")
-                }
-            }
-        } catch (networkException: Exception) {
-            ServerResponse.Failure("Network error: ${networkException.message}")
-        }
-    }
-
-    private fun createHttpClientWithSelfSignedCert(): OkHttpClient {
-        // Load the self-signed certificate
-        val certificateFactory = CertificateFactory.getInstance("X.509")
-        val certificate: X509Certificate = resources.openRawResource(R.raw.cert).use { certStream ->
-            certificateFactory.generateCertificate(certStream) as X509Certificate
-        }
-
-        // Create a KeyStore and add the certificate
-        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-            load(null, null)
-            setCertificateEntry("self-signed", certificate)
-        }
-
-        // Create a TrustManager using the KeyStore
-        val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
-            init(keyStore)
-        }
-
-        // Create an SSLContext
-        val sslContext = SSLContext.getInstance("TLS").apply {
-            init(null, trustManagerFactory.trustManagers, null)
-        }
-
-        // Build the OkHttpClient with the custom SSL settings
-        return OkHttpClient.Builder()
-            .sslSocketFactory(sslContext.socketFactory, trustManagerFactory.trustManagers[0] as X509TrustManager)
-            .hostnameVerifier { _, _ -> true } // Disable hostname verification for development
-            .build()
     }
 
     private fun isValidServerAddress(address: String): Boolean {
