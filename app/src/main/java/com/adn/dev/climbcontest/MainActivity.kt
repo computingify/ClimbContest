@@ -54,7 +54,7 @@ import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 const val RUN_ON_EMULATOR = 1
-const val RUN_LOCAL_SERVER = 0
+const val RUN_LOCAL_SERVER = 1
 
 class MainActivity : ComponentActivity() {
 
@@ -197,7 +197,7 @@ class MainActivity : ComponentActivity() {
                             from = 'A'.code,
                             until = 'N'.code + 1
                         )).toChar() + (1..5).random().toString()
-                        localScannedValue = "F3"
+                        localScannedValue = "E1"
                     }
                 }
             }
