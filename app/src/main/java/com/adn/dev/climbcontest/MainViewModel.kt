@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 class MainViewModel : ViewModel() {
-    private val _serverAddress = MutableStateFlow("maisonadrisoph.freeboxos.fr")
+    private val _serverAddress = MutableStateFlow("192.168.1.100")
     val serverAddress: StateFlow<String> = _serverAddress
 
     private val _climberId = MutableStateFlow<String?>(null)

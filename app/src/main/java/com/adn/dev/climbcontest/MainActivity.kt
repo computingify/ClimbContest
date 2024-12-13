@@ -53,8 +53,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
-const val RUN_ON_EMULATOR = 1
-const val RUN_LOCAL_SERVER = 1
+const val RUN_ON_EMULATOR = 0
+const val RUN_LOCAL_SERVER = 0
 
 class MainActivity : ComponentActivity() {
 
