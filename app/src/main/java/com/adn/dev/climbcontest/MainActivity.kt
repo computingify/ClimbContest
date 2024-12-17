@@ -197,7 +197,7 @@ class MainActivity : ComponentActivity() {
                             from = 'A'.code,
                             until = 'N'.code + 1
                         )).toChar() + (1..5).random().toString()
-                        localScannedValue = "E1"
+                        localScannedValue = "Z1"
                     }
                 }
             }

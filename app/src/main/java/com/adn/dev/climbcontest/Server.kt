@@ -23,7 +23,7 @@ import kotlinx.coroutines.delay
 class Server(private val mainViewModel: MainViewModel, private val context: Context, private val RUN_LOCAL_SERVER: Int) {
 
     // Create a custom OkHttpClient with self-signed certificate support
-    private var client = createHttpClientWithSelfSignedCert()
+    private var client = createDefaultHttpClient()
 
     fun checkOnServer(scanType: String, scannedValue: String): Boolean {
 
@@ -129,9 +129,9 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
         var url = if (1 == RUN_LOCAL_SERVER) {
             "https://10.0.2.2"
         } else {
-            "https://${mainViewModel.serverAddress.value}"
+            "https://climbcontestserver.onrender.com"
         }
-        url += ":5007/api/v2/contest/$requestedApi"
+        url += "/api/v2/contest/$requestedApi"
 
         // Convert payload to JSON string and create request body
         val requestBody: RequestBody = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
@@ -160,6 +160,12 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
         } catch (networkException: Exception) {
             ServerResponse.Failure("Network error: ${networkException.message}")
         }
+    }
+
+    private fun createDefaultHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .hostnameVerifier { _, _ -> true } // Disable hostname verification for development
+            .build()
     }
 
     private fun createHttpClientWithSelfSignedCert(): OkHttpClient {
