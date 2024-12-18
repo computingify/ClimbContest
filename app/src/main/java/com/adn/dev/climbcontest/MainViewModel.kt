@@ -6,8 +6,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 class MainViewModel : ViewModel() {
-    private val _serverAddress = MutableStateFlow("https://climbcontestserver.onrender.com")
-    val serverAddress: StateFlow<String> = _serverAddress
 
     private val _climberId = MutableStateFlow<String?>(null)
     val climberId: StateFlow<String?> = _climberId
@@ -23,23 +21,6 @@ class MainViewModel : ViewModel() {
 
     private val _autoEval = false
     var autoEval = _autoEval
-
-    fun updateServerAddress(newAddress: String) {
-        _serverAddress.value = newAddress
-    }
-
-    fun loadServerAddress(context: Context) {
-        val sharedPrefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        _serverAddress.value = sharedPrefs.getString("BASE_URL", _serverAddress.value) ?: _serverAddress.value
-    }
-
-    fun saveServerAddress(context: Context) {
-        val sharedPrefs = context.getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        with(sharedPrefs.edit()) {
-            putString("BASE_URL", _serverAddress.value)
-            apply()
-        }
-    }
 
     fun setClimberId(id: String?) {
         _climberId.value = id

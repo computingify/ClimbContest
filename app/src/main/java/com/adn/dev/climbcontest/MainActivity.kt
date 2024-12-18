@@ -67,12 +67,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Load server address from shared preferences
-        mainViewModel.loadServerAddress(this)
-
         setContent {
             ClimbContestTheme {
-                AppContent(mainViewModel)
+                AppContent()
             }
         }
 
@@ -80,25 +77,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
-        mainViewModel.saveServerAddress(this) // Save server address on pause
     }
 
     @Composable
-    fun AppContent(viewModel: MainViewModel) {
+    fun AppContent() {
         var isSettingsScreen by remember { mutableStateOf(false) }
 
         if (isSettingsScreen) {
             SettingsScreen(
-                currentAddress = viewModel.serverAddress.collectAsState().value,
-                onAddressChange = { newAddress ->
-                    if (isValidServerAddress(newAddress)) {
-                        viewModel.updateServerAddress(newAddress)
-                    } else {
-                        Toast.makeText(this,
-                            getString(R.string.invalid_server_address), Toast.LENGTH_SHORT).show()
-                    }
-                },
                 onBack = { isSettingsScreen = false },
+                mainViewModel,
                 this
             )
         } else {
@@ -351,7 +339,7 @@ fun MainScreen(viewModel: MainViewModel,
                 Text(stringResource(R.string.send), fontSize = buttonTextSize.sp)
             }
 
-            Spacer(modifier = Modifier.height((spacerSize*3).dp))
+            Spacer(modifier = Modifier.height((spacerSize*2).dp))
 
             Button(
                 onClick = onReset,

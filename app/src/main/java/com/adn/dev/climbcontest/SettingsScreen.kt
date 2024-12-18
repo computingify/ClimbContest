@@ -18,14 +18,11 @@ import com.adn.dev.climbcontest.R
 
 @Composable
 fun SettingsScreen(
-    currentAddress: String,
-    onAddressChange: (String) -> Unit,
     onBack: () -> Unit,
     mainViewModel: MainViewModel,
     context: Context // Pass the context to retrieve version name
 ) {
     var checked by remember { mutableStateOf(mainViewModel.autoEval) }
-    var address by remember { mutableStateOf(currentAddress) }
 
     // Retrieve the app version name from the context
     val versionName = remember {
@@ -76,23 +73,5 @@ fun SettingsScreen(
                 }
             )
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(text = "Server Settings", style = MaterialTheme.typography.headlineSmall)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = address,
-            onValueChange = { address = it },
-            label = { Text(stringResource(R.string.server_address)) },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = {
-                onAddressChange(address)
-                onBack()
-            })
-        )
     }
 }
