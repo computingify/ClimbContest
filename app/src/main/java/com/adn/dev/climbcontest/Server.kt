@@ -91,8 +91,8 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
                                 ).show()
                                 // Delay and reset on success
                                 CoroutineScope(Dispatchers.IO).launch {
-                                    delay(2000)
-                                    mainViewModel.reset()
+                                    delay(500)
+                                    mainViewModel.reset(!mainViewModel.autoEval)
                                 }
                             } else {
                                 Toast.makeText(

@@ -17,4 +17,5 @@
     <string name="network_error">Aucun accès au serveur</string>
     <string name="version">Version: %1$s</string>
     <string name="invalid_server_address">Error dans l\'adresse du serveur</string>
+    <string name="auto_evaluate">Mode auto evalutation</string>
 </resources>

@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 class MainViewModel : ViewModel() {
-    private val _serverAddress = MutableStateFlow("192.168.1.100")
+    private val _serverAddress = MutableStateFlow("https://climbcontestserver.onrender.com")
     val serverAddress: StateFlow<String> = _serverAddress
 
     private val _climberId = MutableStateFlow<String?>(null)
@@ -20,6 +20,9 @@ class MainViewModel : ViewModel() {
 
     private val _blocName = MutableStateFlow<String?>(null)
     val blocName: StateFlow<String?> = _blocName
+
+    private val _autoEval = false
+    var autoEval = _autoEval
 
     fun updateServerAddress(newAddress: String) {
         _serverAddress.value = newAddress
@@ -54,9 +57,19 @@ class MainViewModel : ViewModel() {
         _blocName.value = id
     }
 
-    fun reset() {
-        _climberId.value = null
-        _climberName.value = null
+    fun enableAutoEval() {
+        autoEval = true
+    }
+
+    fun disableAutoEval() {
+        autoEval = false
+    }
+
+    fun reset(all: Boolean = true) {
+        if (all) {
+            _climberId.value = null
+            _climberName.value = null
+        }
         _blocId.value = null
         _blocName.value = null
     }

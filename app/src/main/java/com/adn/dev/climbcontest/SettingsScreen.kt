@@ -1,4 +1,5 @@
 import android.content.Context
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
@@ -12,6 +13,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.adn.dev.climbcontest.MainViewModel
 import com.adn.dev.climbcontest.R
 
 @Composable
@@ -19,8 +21,10 @@ fun SettingsScreen(
     currentAddress: String,
     onAddressChange: (String) -> Unit,
     onBack: () -> Unit,
+    mainViewModel: MainViewModel,
     context: Context // Pass the context to retrieve version name
 ) {
+    var checked by remember { mutableStateOf(mainViewModel.autoEval) }
     var address by remember { mutableStateOf(currentAddress) }
 
     // Retrieve the app version name from the context
@@ -52,6 +56,29 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Add the Switch button for autoEvaluate
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = stringResource(R.string.auto_evaluate), fontSize = 16.sp)
+            Switch(
+                checked = checked,
+                onCheckedChange = {
+                    checked = it
+                    Log.d("DEBUG", "onCheckedChange: $checked")
+                    when (checked) {
+                        true -> mainViewModel.enableAutoEval()
+                        false -> mainViewModel.disableAutoEval()
+                    }
+                    mainViewModel.reset()
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Text(text = "Server Settings", style = MaterialTheme.typography.headlineSmall)
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -67,20 +94,5 @@ fun SettingsScreen(
                 onBack()
             })
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = {
-            onAddressChange(address)
-            onBack()
-        }) {
-            Text(stringResource(R.string.save))
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = onBack) {
-            Text(stringResource(R.string.back))
-        }
     }
 }
