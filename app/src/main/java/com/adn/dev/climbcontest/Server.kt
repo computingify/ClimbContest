@@ -1,6 +1,7 @@
 package com.adn.dev.climbcontest
 
 import android.content.Context
+import android.view.Gravity
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,15 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
 
     // Create a custom OkHttpClient with self-signed certificate support
     private var client = createDefaultHttpClient()
+    private val WAIT_TIME_RETRY_MS = 150
+
+    // Add a listener to notify about the submit result
+    interface SubmitListener {
+        fun onSubmitSuccess()
+        fun onSubmitFailure()
+    }
+
+    var submitListener: SubmitListener? = null
 
     fun checkOnServer(scanType: String, scannedValue: String): Boolean {
 
@@ -76,49 +86,67 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
             }
 
             val uri = "success"
+            var retryCount = 0
+            val maxRetries = 5
+            var isSuccess = false
+            var result: ServerResponse?
 
-            val result = sendPostToServer(payload, uri)
-            withContext(Dispatchers.Main) {
+            while ((retryCount < maxRetries) && !isSuccess) {
+                result = sendPostToServer(payload, uri)
                 when (result) {
                     is ServerResponse.Success -> {
                         try {
-                            val isSuccess = result.data.optBoolean("success", false)
+                            isSuccess = result.data.optBoolean("success", false)
                             if (isSuccess) {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.climber_and_bloc_successfully_registered),
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                // Delay and reset on success
-                                CoroutineScope(Dispatchers.IO).launch {
-                                    delay(500)
-                                    mainViewModel.reset(!mainViewModel.autoEval)
-                                }
+                                break // Exit the loop if successful
                             } else {
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.submit_failed),
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                retryCount++
+                                delay(WAIT_TIME_RETRY_MS.toLong()) // Wait for 1 second before retrying
                             }
                         } catch (jsonException: Exception) {
                             println("JSON parsing error: ${jsonException.message}")
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.json_parsing_error),
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            retryCount++
+                            delay(WAIT_TIME_RETRY_MS.toLong())
                         }
                     }
                     is ServerResponse.Failure -> {
-                        // Handle the failure case
                         println("Error: ${result.errorMessage}")
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.network_error),
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        retryCount++
+                        delay(WAIT_TIME_RETRY_MS.toLong())
                     }
+                    else -> {
+                        retryCount++
+                        delay(WAIT_TIME_RETRY_MS.toLong())
+                    }
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                if (isSuccess) {
+                    val successToast = Toast.makeText(
+                        context,
+                        context.getString(R.string.climber_and_bloc_successfully_registered),
+                        Toast.LENGTH_SHORT
+                    )
+                    successToast.setGravity(Gravity.TOP, 0, 0)
+                    successToast.show()
+                    // Notify success
+                    submitListener?.onSubmitSuccess()
+                    // Delay and reset on success
+                    CoroutineScope(Dispatchers.IO).launch {
+                        delay(500)
+                        mainViewModel.reset(!mainViewModel.autoEval)
+                    }
+                } else {
+                    val failureToast = Toast.makeText(
+                        context,
+                        context.getString(R.string.submit_failed),
+                        Toast.LENGTH_LONG
+                    )
+                    failureToast.setGravity(Gravity.TOP, 0, 0)
+                    failureToast.show()
+                    // Notify failure
+                    submitListener?.onSubmitFailure()
                 }
             }
         }

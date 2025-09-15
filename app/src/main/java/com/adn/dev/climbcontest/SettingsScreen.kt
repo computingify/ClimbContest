@@ -44,7 +44,7 @@ fun SettingsScreen(
         // Display the version name on the top left corner
         Box(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = stringResource(R.string.version, versionName),
+                text = stringResource(R.string.version, versionName ?: "N/A"),
                 color = Color.Gray,
                 fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.TopStart)

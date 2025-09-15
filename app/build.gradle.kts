@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace = "com.adn.dev.climbcontest"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.adn.dev.climbcontest"
         minSdk = 29
-        targetSdk = 34
-        versionCode = 9
-        versionName = "2.0.109"
+        targetSdk = 35
+        versionCode = 13
+        versionName = "3.1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

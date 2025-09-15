@@ -56,7 +56,7 @@ import kotlin.random.Random
 const val RUN_ON_EMULATOR = 0
 const val RUN_LOCAL_SERVER = 0
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), Server.SubmitListener {
 
     // Define the scanner as a class member
     private lateinit var scanner: GmsBarcodeScanner
@@ -225,6 +225,14 @@ class MainActivity : ComponentActivity() {
         )
 
         return ipRegex.matches(address) || urlRegex.matches(address)
+    }
+
+    override fun onSubmitSuccess() {
+        TODO("Not yet implemented")
+    }
+
+    override fun onSubmitFailure() {
+        TODO("Not yet implemented")
     }
 }
 
