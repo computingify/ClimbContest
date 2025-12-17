@@ -344,8 +344,8 @@ fun MainScreen(viewModel: MainViewModel,
             Button(
                 onClick = onReset,
                 modifier = Modifier
-                    .height(buttonSize.dp) // Set button height
-                    .fillMaxWidth() // Make the button take full width
+                    .height(60.dp) // Set button height
+                    .fillMaxWidth(0.5f) // Make the button take full width
             ) {
                 Text(stringResource(R.string.reset), fontSize = buttonTextSize.sp)
             }
