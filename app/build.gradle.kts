@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.adn.dev.climbcontest"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.adn.dev.climbcontest"
@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.service.base)
     implementation(libs.barcode.scanning)
     implementation(libs.okhttp)
+    implementation(libs.androidx.compose.material.icons.extended.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

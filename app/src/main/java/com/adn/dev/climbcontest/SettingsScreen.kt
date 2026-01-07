@@ -26,7 +26,11 @@ fun SettingsScreen(
 
     // Retrieve the app version name from the context
     val versionName = remember {
+        try {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        } catch (e: Exception) {
+            null // Return null if an exception occurs
+        }
     }
 
     // Handle the Android back button
@@ -44,7 +48,7 @@ fun SettingsScreen(
         // Display the version name on the top left corner
         Box(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = stringResource(R.string.version, versionName),
+                text = stringResource(R.string.version, versionName ?: "N/A"),
                 color = Color.Gray,
                 fontSize = 12.sp,
                 modifier = Modifier.align(Alignment.TopStart)

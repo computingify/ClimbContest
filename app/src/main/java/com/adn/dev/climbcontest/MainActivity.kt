@@ -282,7 +282,7 @@ fun MainScreen(viewModel: MainViewModel,
                 .fillMaxSize()
                 .padding(16.dp),
             verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.Start
         ) {
             Button(
                 onClick = onScanClimber,
@@ -296,13 +296,18 @@ fun MainScreen(viewModel: MainViewModel,
 
             if (climberName != null) {
                 Spacer(modifier = Modifier.height(buttonInfoSpaceSize.dp))
-                Text(
-                    stringResource(R.string.climber) + ": $climberName",
-                    fontSize = infoTextSize.sp,
-                    modifier = Modifier
-                        .background(Color.LightGray) // Set your background color here
-                        .padding(6.dp)
-                )
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        stringResource(R.string.climber) + ": $climberName",
+                        fontSize = infoTextSize.sp,
+                        modifier = Modifier
+                            .background(Color.LightGray) // Set your background color here
+                            .padding(6.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(spacerSize.dp))
@@ -319,13 +324,18 @@ fun MainScreen(viewModel: MainViewModel,
 
             if (blocName != null) {
                 Spacer(modifier = Modifier.height(buttonInfoSpaceSize.dp))
-                Text(
-                    stringResource(R.string.block) + ": $blocName",
-                    fontSize = infoTextSize.sp,
-                    modifier = Modifier
-                        .background(Color.LightGray) // Set your background color here
-                        .padding(6.dp)
-                )
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        stringResource(R.string.block) + ": $blocName",
+                        fontSize = infoTextSize.sp,
+                        modifier = Modifier
+                            .background(Color.LightGray) // Set your background color here
+                            .padding(6.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height((spacerSize).dp))
