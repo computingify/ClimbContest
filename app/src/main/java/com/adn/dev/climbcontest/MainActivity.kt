@@ -349,7 +349,7 @@ fun MainScreen(viewModel: MainViewModel,
                 Text(stringResource(R.string.send), fontSize = buttonTextSize.sp)
             }
 
-            Spacer(modifier = Modifier.height((spacerSize*2).dp))
+            Spacer(modifier = Modifier.height((spacerSize*3).dp))
 
             Button(
                 onClick = onReset,
