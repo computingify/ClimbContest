@@ -1,18 +1,19 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    alias(libs.plugins.jetbrains.compose)
 }
 
 android {
     namespace = "com.adn.dev.climbcontest"
-    compileSdk = 36
+    compileSdk = 36 // For Android 15 Beta. Use 34 for the latest stable release.
 
     defaultConfig {
         applicationId = "com.adn.dev.climbcontest"
         minSdk = 29
-        targetSdk = 34
-        versionCode = 14
-        versionName = "3.1.3"
+        targetSdk = 36
+        versionCode = 15
+        versionName = "3.1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -34,14 +35,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
-    kotlinOptions {
-        jvmTarget = "1.8"
+
+    // FIX: This is the correct modern DSL for setting the Kotlin JVM target.
+    // The `jvmTarget` property has been replaced by the `jvmToolchain` function.
+    kotlin {
+        jvmToolchain(8)
     }
+
     buildFeatures {
         compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.1"
     }
     packaging {
         resources {
@@ -51,7 +53,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)

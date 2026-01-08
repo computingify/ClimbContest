@@ -12,12 +12,6 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Request
 import org.json.JSONObject
-import java.security.KeyStore
-import java.security.cert.CertificateFactory
-import java.security.cert.X509Certificate
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.delay
 
 class Server(private val mainViewModel: MainViewModel, private val context: Context, private val RUN_LOCAL_SERVER: Int) {
@@ -145,14 +139,14 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
         return try {
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
-                    val responseBody = response.body?.string()
-                    responseBody?.let {
+                    val responseBody = response.body.string()
+                    responseBody.let {
                         try {
                             ServerResponse.Success(JSONObject(it))
                         } catch (jsonException: Exception) {
                             ServerResponse.Failure("JSON parsing error: ${jsonException.message}")
                         }
-                    } ?: ServerResponse.Failure("Empty response body")
+                    }
                 } else {
                     ServerResponse.Failure("HTTP request failed with code: ${response.code}")
                 }
@@ -168,33 +162,4 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
             .build()
     }
 
-    private fun createHttpClientWithSelfSignedCert(): OkHttpClient {
-        // Load the self-signed certificate
-        val certificateFactory = CertificateFactory.getInstance("X.509")
-        val certificate: X509Certificate = context.resources.openRawResource(R.raw.cert).use { certStream ->
-            certificateFactory.generateCertificate(certStream) as X509Certificate
-        }
-
-        // Create a KeyStore and add the certificate
-        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-            load(null, null)
-            setCertificateEntry("self-signed", certificate)
-        }
-
-        // Create a TrustManager using the KeyStore
-        val trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply {
-            init(keyStore)
-        }
-
-        // Create an SSLContext
-        val sslContext = SSLContext.getInstance("TLS").apply {
-            init(null, trustManagerFactory.trustManagers, null)
-        }
-
-        // Build the OkHttpClient with the custom SSL settings
-        return OkHttpClient.Builder()
-            .sslSocketFactory(sslContext.socketFactory, trustManagerFactory.trustManagers[0] as X509TrustManager)
-            .hostnameVerifier { _, _ -> true } // Disable hostname verification for development
-            .build()
-    }
 }
