@@ -82,6 +82,12 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.androidx.compose.material.icons.extended.android)
     testImplementation(libs.junit)
+    // Serveur factice : permet de tester la couche reseau sur la JVM,
+    // sans emulateur. Voir ClimbContestApiTest.
+    testImplementation(libs.mockwebserver)
+    // org.json est stubbe dans l'Android SDK : la JVM a besoin d'une vraie
+    // implementation, sinon chaque appel leve « not mocked ».
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
