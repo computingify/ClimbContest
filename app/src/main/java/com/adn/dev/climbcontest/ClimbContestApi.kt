@@ -4,6 +4,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
@@ -80,6 +81,110 @@ class ClimbContestApi(
     fun enregistrerReussite(dossard: String, tag: String): ApiResult =
         poster("success", JSONObject().put("bib", dossard).put("bloc", tag))
 
+    /**
+     * Télécharge le catalogue.
+     *
+     * [versionConnue] est envoyée en `If-None-Match` : si rien n'a bougé, le
+     * serveur répond `304` avec un corps vide — ~150 octets au lieu de 15 ko.
+     * C'est le cas le plus fréquent, et de loin.
+     */
+    fun telechargerCatalogue(versionConnue: Int? = null): ResultatCatalogue {
+        val requete = Request.Builder()
+            .url("$baseUrl/api/v2/catalog")
+            .get()
+            .apply { versionConnue?.let { header("If-None-Match", "\"$it\"") } }
+            .build()
+
+        return try {
+            client.newCall(requete).execute().use { reponse ->
+                when {
+                    reponse.code == 304 -> ResultatCatalogue.DejaAJour
+                    reponse.isSuccessful -> {
+                        val texte = reponse.body?.string().orEmpty()
+                        Catalogue.depuisReponseServeur(texte)
+                            ?.let { ResultatCatalogue.Recu(it) }
+                            ?: ResultatCatalogue.Echec("Catalogue illisible", reseau = true)
+                    }
+                    else -> ResultatCatalogue.Echec(
+                        "Catalogue refuse (${reponse.code})",
+                        reseau = reponse.code >= 500,
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            ResultatCatalogue.Echec("Catalogue injoignable : ${e.message}", reseau = true)
+        }
+    }
+
+    /**
+     * Envoie un lot de réussites.
+     *
+     * Le serveur répond **par élément**. Une `ref` absente de la réponse n'a pas
+     * été traitée : l'appelant doit la garder en file. Le défaut est de garder —
+     * perdre une réussite est le seul résultat inacceptable.
+     */
+    fun envoyerLot(reussites: List<ReussiteEnAttente>): ResultatLot {
+        if (reussites.isEmpty()) return ResultatLot(emptySet(), emptyList(), null)
+
+        val items = JSONArray()
+        reussites.forEach { items.put(JSONObject(it.versJson())) }
+        val corps = JSONObject().put("items", items)
+
+        val requete = Request.Builder()
+            .url("$baseUrl/api/v3/successes")
+            .post(corps.toString().toRequestBody(JSON))
+            .build()
+
+        return try {
+            client.newCall(requete).execute().use { reponse ->
+                val texte = reponse.body?.string().orEmpty()
+                if (!reponse.isSuccessful) {
+                    // 401, 409, 413... Rien n'est acquitte : la file reste
+                    // intacte. Un 5xx ou un 409 « pas de competition active »
+                    // se reessaient ; un 401 aussi, faute de mieux, mais il est
+                    // signale au juge.
+                    return ResultatLot(
+                        emptySet(), emptyList(), null,
+                        echec = "Envoi refuse (${reponse.code})",
+                        codeHttp = reponse.code,
+                    )
+                }
+                val json = try {
+                    JSONObject(texte)
+                } catch (e: Exception) {
+                    return ResultatLot(emptySet(), emptyList(), null,
+                                       echec = "Reponse illisible", codeHttp = reponse.code)
+                }
+                val acquittees = mutableSetOf<String>()
+                val refusees = mutableListOf<RefusServeur>()
+                json.optJSONArray("resultats")?.let { tableau ->
+                    for (i in 0 until tableau.length()) {
+                        val r = tableau.optJSONObject(i) ?: continue
+                        val ref = r.optString("ref")
+                        if (ref.isBlank()) continue
+                        when (r.optString("etat")) {
+                            // Les trois etats sont DEFINITIFS : la reussite
+                            // quitte la file dans les trois cas.
+                            "enregistree", "deja_connue" -> acquittees += ref
+                            "refusee" -> {
+                                acquittees += ref
+                                refusees += RefusServeur(ref, r.optString("message"))
+                            }
+                            // Tout autre etat : on ne sait pas, donc on garde.
+                        }
+                    }
+                }
+                ResultatLot(
+                    acquittees, refusees,
+                    json.optInt("catalogue_version", -1).takeIf { it >= 0 },
+                )
+            }
+        } catch (e: Exception) {
+            ResultatLot(emptySet(), emptyList(), null,
+                        echec = "Serveur injoignable : ${e.message}")
+        }
+    }
+
     private fun poster(chemin: String, corps: JSONObject): ApiResult {
         val requete = Request.Builder()
             .url("$baseUrl/api/v2/contest/$chemin")
@@ -128,6 +233,32 @@ class ClimbContestApi(
             ApiResult.Echec("Aucun acces au serveur : ${e.message}", reseau = true)
         }
     }
+}
+
+/** Ce que le serveur a dit d'un envoi de lot. */
+data class ResultatLot(
+    /** Les `ref` sur lesquelles le serveur a **statué**. Elles quittent la file. */
+    val acquittees: Set<String>,
+    /** Celles qu'il a refusées — à signaler au juge, pas à réessayer. */
+    val refusees: List<RefusServeur>,
+    /** Version du catalogue côté serveur, si elle est venue. */
+    val catalogueVersion: Int?,
+    /** Renseigné si l'envoi n'a pas abouti. La file reste alors intacte. */
+    val echec: String? = null,
+    val codeHttp: Int? = null,
+) {
+    val aReussi: Boolean get() = echec == null
+}
+
+/** Un élément que le serveur a refusé, avec sa raison. */
+data class RefusServeur(val ref: String, val message: String)
+
+/** Résultat d'un téléchargement de catalogue. */
+sealed class ResultatCatalogue {
+    data class Recu(val catalogue: Catalogue) : ResultatCatalogue()
+    /** `304` : rien n'a bougé, ~150 octets échangés. */
+    object DejaAJour : ResultatCatalogue()
+    data class Echec(val message: String, val reseau: Boolean = false) : ResultatCatalogue()
 }
 
 /** Résultat d'un appel. Volontairement plus riche que le booléen d'avant. */
