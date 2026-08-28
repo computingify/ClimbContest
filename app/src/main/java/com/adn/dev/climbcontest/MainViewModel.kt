@@ -22,6 +22,20 @@ class MainViewModel : ViewModel() {
     private val _autoEval = false
     var autoEval = _autoEval
 
+    /**
+     * Combien de réussites attendent encore d'atteindre le serveur.
+     *
+     * Le juge doit pouvoir le voir. Sans indicateur, une file qui ne part
+     * jamais — backend éteint, wifi coupé toute la matinée — serait invisible
+     * jusqu'au dépouillement.
+     */
+    private val _enAttente = MutableStateFlow(0)
+    val enAttente: StateFlow<Int> = _enAttente
+
+    fun setEnAttente(n: Int) {
+        _enAttente.value = n
+    }
+
     fun setClimberId(id: String?) {
         _climberId.value = id
     }

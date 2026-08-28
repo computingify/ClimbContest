@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
@@ -95,7 +96,8 @@ class MainActivity : ComponentActivity() {
             SettingsScreen(
                 onBack = { isSettingsScreen = false },
                 mainViewModel,
-                this
+                this,
+                onToutEnvoyer = { server.toutEnvoyerMaintenant(lifecycleScope) },
             )
         } else {
             Box(
@@ -154,6 +156,9 @@ class MainActivity : ComponentActivity() {
             }
         // Initialize the server communication object
         server = Server(mainViewModel, this)
+        // Envoi par lots et rafraichissement du catalogue, en arriere-plan.
+        // Lie au cycle de vie : la boucle s'arrete avec l'ecran.
+        server.demarrerBoucleDeFond(lifecycleScope)
     }
 
     private fun startScanning(scanType: String) {
@@ -234,6 +239,8 @@ fun MainScreen(viewModel: MainViewModel,
     val blocId by viewModel.blocId.collectAsState()
     val blocName by viewModel.blocName.collectAsState()
 
+    val enAttente by viewModel.enAttente.collectAsState()
+
     val climberButtonColor = if (climberId != null) Color.Green else Color.Gray
     val blocButtonColor = if (blocId != null) Color.Green else Color.Gray
 
@@ -251,6 +258,18 @@ fun MainScreen(viewModel: MainViewModel,
                 )
             },
             actions = {
+                // Ce que le juge doit pouvoir voir : combien de reussites
+                // n'ont pas encore atteint le serveur. Sans cet indicateur, une
+                // file qui ne part jamais -- backend eteint, wifi coupe toute
+                // la matinee -- resterait invisible jusqu'au depouillement.
+                if (enAttente > 0) {
+                    Text(
+                        text = stringResource(R.string.en_attente, enAttente),
+                        fontSize = 16.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
                 IconButton(
                     onClick = onOpenSettings,
                     modifier = Modifier.padding(end = 10.dp)

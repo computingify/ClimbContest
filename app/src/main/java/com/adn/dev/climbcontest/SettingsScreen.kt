@@ -20,9 +20,11 @@ import com.adn.dev.climbcontest.R
 fun SettingsScreen(
     onBack: () -> Unit,
     mainViewModel: MainViewModel,
-    context: Context // Pass the context to retrieve version name
+    context: Context, // Pass the context to retrieve version name
+    onToutEnvoyer: () -> Unit = {},
 ) {
     var checked by remember { mutableStateOf(mainViewModel.autoEval) }
+    val enAttente by mainViewModel.enAttente.collectAsState()
 
     // Retrieve the app version name from the context
     val versionName = remember {
@@ -76,6 +78,26 @@ fun SettingsScreen(
                     mainViewModel.reset()
                 }
             )
+        }
+
+        // Fin de competition : s'assurer que rien ne traine avant d'eteindre
+        // les telephones. Le bouton ne contourne pas le retrait exponentiel --
+        // appuyer en boucle sur un serveur eteint ne sert a rien.
+        Spacer(modifier = Modifier.height(24.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = if (enAttente > 0)
+                    stringResource(R.string.en_attente, enAttente)
+                else stringResource(R.string.file_vide),
+                fontSize = 16.sp,
+            )
+            Button(onClick = onToutEnvoyer, enabled = enAttente > 0) {
+                Text(stringResource(R.string.tout_envoyer))
+            }
         }
     }
 }
