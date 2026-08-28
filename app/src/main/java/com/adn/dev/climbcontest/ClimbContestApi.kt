@@ -22,9 +22,14 @@ import java.util.concurrent.TimeUnit
  * coroutines.
  */
 class ClimbContestApi(
-    private val baseUrl: String = BuildConfig.SERVER_URL,
+    baseUrl: String = BuildConfig.SERVER_URL,
     private val client: OkHttpClient = defaultClient(),
 ) {
+
+    // Normalise ici, pas chez l'appelant : une adresse collee depuis un
+    // navigateur porte un slash final, et « .../ » + « /api/... » donnerait
+    // « //api/v2/contest/success ». Certains proxys le suivent, d'autres non.
+    private val baseUrl: String = baseUrl.trimEnd('/')
 
     companion object {
         private val JSON = "application/json".toMediaTypeOrNull()
@@ -41,9 +46,16 @@ class ClimbContestApi(
          * Les délais sont courts volontairement : un juge qui attend plus de
          * dix secondes devant son téléphone recommence, et le double appui
          * n'est pas un problème puisque l'envoi est idempotent côté serveur.
+         *
+         * Le délai de connexion est aligné sur les autres (10 s et non 5 s) :
+         * vingt-cinq téléphones sur le même point d'accès font monter la poignée
+         * de main TCP bien au-delà de cinq secondes, et abandonner là affiche
+         * « aucun accès au serveur » alors que le serveur répond très bien. Ça
+         * ne coûte rien quand tout va bien — une connexion saine s'établit en
+         * quelques dizaines de millisecondes.
          */
         fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
-            .connectTimeout(5, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
@@ -80,9 +92,14 @@ class ClimbContestApi(
                 val json = try {
                     JSONObject(texte)
                 } catch (e: Exception) {
+                    // Un corps illisible, c'est presque toujours une page HTML
+                    // d'erreur : 502 de Render au reveil a froid, 503 d'un
+                    // proxy. Ce n'est PAS un refus metier, et le juge doit
+                    // reessayer -- l'envoi est idempotent, ca ne coute rien.
                     return ApiResult.Echec(
                         "Reponse illisible du serveur",
                         codeHttp = reponse.code,
+                        reseau = true,
                     )
                 }
                 // Le serveur repond 201 en cas de succes, 400 sinon, et porte
@@ -97,6 +114,10 @@ class ClimbContestApi(
                     ApiResult.Echec(
                         json.optString("message", "Refuse par le serveur"),
                         codeHttp = reponse.code,
+                        // Un 5xx est une panne du serveur, pas un refus : « envoi
+                        // echoue » se lit comme definitif et le juge passe au
+                        // grimpeur suivant, alors qu'il suffisait de reessayer.
+                        reseau = reponse.code >= 500,
                     )
                 }
             }

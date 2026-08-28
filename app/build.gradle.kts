@@ -36,8 +36,18 @@ android {
                 "\"${project.findProperty("serverUrl") ?: "http://10.0.2.2:5007"}\"")
         }
         release {
-            buildConfigField("String", "SERVER_URL",
-                "\"${project.findProperty("serverUrl") ?: "https://climbcontestserver.onrender.com"}\"")
+            // findProperty lit la ligne de commande MAIS AUSSI gradle.properties,
+            // ~/.gradle/gradle.properties et les reglages de l'IDE. Un
+            // « serverUrl=http://10.0.2.2:5007 » pose un jour pour se simplifier
+            // les tests produirait, trois semaines plus tard, un APK Play Store
+            // pointant sur la machine de dev -- et qui echouerait a chaque scan,
+            // le cleartext etant bloque en release. Rien ne le detecterait.
+            val urlRelease = (project.findProperty("serverUrl")
+                ?: "https://climbcontestserver.onrender.com").toString()
+            require(urlRelease.startsWith("https://")) {
+                "L'adresse d'un build release doit etre en HTTPS, obtenu : $urlRelease"
+            }
+            buildConfigField("String", "SERVER_URL", "\"$urlRelease\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -148,9 +148,11 @@ class ClimbContestApiTest {
 
     @Test
     fun `le second envoi du meme couple est aussi un succes`() {
-        // Idempotence : le backend repond succes les deux fois. L'application ne
-        // doit JAMAIS afficher d'erreur sur un double appui, sinon le juge
-        // recommence et croit que rien n'est parti.
+        // Portee de ce test : le COTE APPLICATION. Il ne prouve pas que le
+        // backend est idempotent -- c'est test_e2e.py qui le verifie, avec un
+        // vrai serveur. Ici on verifie que si le serveur repond succes deux
+        // fois, l'application l'affiche deux fois comme un succes, sans etat
+        // interne qui ferait rater le second envoi.
         repondre(201, """{"success":true,"message":"Well done"}""")
         repondre(201, """{"success":true,"message":"Well done"}""")
 
@@ -204,13 +206,48 @@ class ClimbContestApiTest {
     }
 
     @Test
-    fun `une erreur 500 est un echec, pas un plantage`() {
+    fun `une erreur 500 est traitee comme une panne, pas comme un refus`() {
+        // « Envoi echoue » se lit comme definitif : le juge passe au grimpeur
+        // suivant. « Erreur reseau » se lit comme « reessaie » -- et reessayer
+        // est gratuit, l'envoi etant idempotent.
         repondre(500, """{"success":false,"message":"An error occurred"}""")
 
-        val r = api.enregistrerReussite("12", "ZJ6")
+        val r = api.enregistrerReussite("12", "ZJ6") as ApiResult.Echec
 
-        assertTrue(r is ApiResult.Echec)
-        assertEquals(500, (r as ApiResult.Echec).codeHttp)
+        assertEquals(500, r.codeHttp)
+        assertTrue("un 5xx doit inviter a reessayer", r.reseau)
+    }
+
+    @Test
+    fun `une page html 502 est traitee comme une panne`() {
+        // Ce que renvoie Render au reveil a froid, ou un proxy en surcharge.
+        repondre(502, "<html>502 Bad Gateway</html>")
+
+        val r = api.enregistrerReussite("12", "ZJ6") as ApiResult.Echec
+
+        assertTrue("un corps illisible doit inviter a reessayer", r.reseau)
+    }
+
+    @Test
+    fun `un 400 metier reste un refus, pas une panne`() {
+        repondre(400, """{"success":false,"message":"Dossard 999 inconnu"}""")
+
+        val r = api.verifierGrimpeur("999") as ApiResult.Echec
+
+        assertTrue("un refus metier ne doit pas inviter a reessayer", !r.reseau)
+    }
+
+    @Test
+    fun `un 401 est un refus, pas une panne`() {
+        // Ce que renverra la production le jour ou la cle d'API passe en mode
+        // strict alors que l'application n'en envoie pas.
+        repondre(401, """{"success":false,"message":"Cle d'API requise"}""")
+
+        val r = api.enregistrerReussite("12", "ZJ6") as ApiResult.Echec
+
+        assertEquals(401, r.codeHttp)
+        assertTrue(!r.reseau)
+        assertTrue(r.message.contains("cle", true))
     }
 
     @Test
@@ -223,6 +260,20 @@ class ClimbContestApiTest {
     }
 
     // --- L'adresse du serveur -------------------------------------------------
+
+    @Test
+    fun `un slash final dans l'adresse ne produit pas de double slash`() {
+        // Une adresse collee depuis un navigateur en porte un.
+        val avecSlash = ClimbContestApi(
+            baseUrl = serveur.url("/").toString(),   // volontairement NON nettoyee
+            client = OkHttpClient.Builder().build(),
+        )
+        repondre(201, """{"success":true}""")
+
+        avecSlash.verifierGrimpeur("1")
+
+        assertEquals("/api/v2/contest/climber/name", serveur.takeRequest().url.encodedPath)
+    }
 
     @Test
     fun `l'adresse de base est respectee`() {

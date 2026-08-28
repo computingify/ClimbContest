@@ -57,39 +57,41 @@ class Server(
         }
     }
 
-    /** Envoie la réussite en cours, puis remet l'écran à zéro si elle est passée. */
+    /**
+     * Envoie la réussite en cours, puis remet l'écran à zéro si elle est passée.
+     *
+     * Cette méthode ne décide de rien : elle orchestre. Les décisions — faut-il
+     * envoyer, que lit le juge, l'écran doit-il se vider — sont dans
+     * [DecisionEnvoi], qui est testé sur la JVM.
+     */
     fun submit() {
         CoroutineScope(Dispatchers.IO).launch {
             val dossard = mainViewModel.climberId.value
             val bloc = mainViewModel.blocId.value
-            if (dossard == null || bloc == null) return@launch
 
-            val resultat = api.enregistrerReussite(dossard, bloc)
+            val message = DecisionEnvoi.avantEnvoi(dossard, bloc)
+                ?: DecisionEnvoi.apresEnvoi(api.enregistrerReussite(dossard!!, bloc!!))
 
             withContext(Dispatchers.Main) {
-                when (resultat) {
-                    is ApiResult.Succes -> {
-                        toast(R.string.climber_and_bloc_successfully_registered)
-                        // Court delai pour que le juge voie la confirmation avant
-                        // que l'ecran ne se vide.
-                        CoroutineScope(Dispatchers.IO).launch {
-                            delay(500)
-                            mainViewModel.reset(!mainViewModel.autoEval)
-                        }
-                    }
-                    is ApiResult.Echec -> {
-                        // On distingue « le serveur a refuse » de « on n'a pas pu
-                        // lui parler » : dans une salle en sous-sol, le second cas
-                        // est le plus frequent, et le juge doit savoir qu'il peut
-                        // simplement reessayer.
-                        toast(
-                            if (resultat.reseau) R.string.network_error
-                            else R.string.submit_failed
-                        )
+                toast(texteDe(message))
+                if (DecisionEnvoi.doitReinitialiser(message)) {
+                    // Court delai pour que le juge voie la confirmation avant que
+                    // l'ecran ne se vide.
+                    CoroutineScope(Dispatchers.IO).launch {
+                        delay(500)
+                        mainViewModel.reset(!mainViewModel.autoEval)
                     }
                 }
             }
         }
+    }
+
+    /** Traduction pure du verdict en ressource affichable. Aucune logique ici. */
+    private fun texteDe(message: MessageJuge): Int = when (message) {
+        MessageJuge.RIEN_A_ENVOYER -> R.string.rien_a_envoyer
+        MessageJuge.VALIDE -> R.string.climber_and_bloc_successfully_registered
+        MessageJuge.ERREUR_RESEAU -> R.string.network_error
+        MessageJuge.ENVOI_REFUSE -> R.string.submit_failed
     }
 
     private fun toast(res: Int) =
