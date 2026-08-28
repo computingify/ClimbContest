@@ -21,8 +21,42 @@ android {
         }
     }
 
+    // Adresse du backend, choisie A LA COMPILATION mais surchargeable en ligne de
+    // commande -- pas de constante a editer dans le code source.
+    //
+    //   ./gradlew installDebug                                    -> backend local (emulateur)
+    //   ./gradlew installDebug -PserverUrl=https://climbcontest.adn-dev.fr
+    //   ./gradlew assembleRelease                                 -> production
     buildTypes {
+        debug {
+            // 10.0.2.2 : la machine hote vue depuis l'emulateur Android.
+            // HTTP en clair, autorise uniquement en debug par
+            // src/debug/res/xml/network_security_config.xml.
+            buildConfigField("String", "SERVER_URL",
+                "\"${project.findProperty("serverUrl") ?: "http://10.0.2.2:5007"}\"")
+        }
         release {
+            // Le release lit `releaseServerUrl`, PAS `serverUrl`. Deux raisons,
+            // et la seconde a ete trouvee a la relecture :
+            //
+            // 1. findProperty lit la ligne de commande MAIS AUSSI
+            //    gradle.properties, ~/.gradle/gradle.properties et les reglages
+            //    de l'IDE. Un « serverUrl=http://10.0.2.2:5007 » pose un jour
+            //    pour se simplifier les tests produirait, trois semaines plus
+            //    tard, un APK Play Store pointant sur la machine de dev. Avec
+            //    deux noms distincts, c'est structurellement impossible.
+            //
+            // 2. Ce bloc est evalue a la CONFIGURATION de Gradle, pour
+            //    n'importe quelle tache. Un `require()` portant sur `serverUrl`
+            //    faisait donc echouer `installDebug -PserverUrl=http://...` --
+            //    la commande meme que docs/tester-avec-l-emulateur.md
+            //    recommande pour tester depuis un telephone du wifi.
+            val urlRelease = (project.findProperty("releaseServerUrl")
+                ?: "https://climbcontestserver.onrender.com").toString()
+            require(urlRelease.startsWith("https://")) {
+                "L'adresse d'un build release doit etre en HTTPS, obtenu : $urlRelease"
+            }
+            buildConfigField("String", "SERVER_URL", "\"$urlRelease\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -44,6 +78,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true          // pour SERVER_URL
     }
     packaging {
         resources {
@@ -66,6 +101,12 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.androidx.compose.material.icons.extended.android)
     testImplementation(libs.junit)
+    // Serveur factice : permet de tester la couche reseau sur la JVM,
+    // sans emulateur. Voir ClimbContestApiTest.
+    testImplementation(libs.mockwebserver)
+    // org.json est stubbe dans l'Android SDK : la JVM a besoin d'une vraie
+    // implementation, sinon chaque appel leve « not mocked ».
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

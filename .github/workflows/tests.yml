@@ -1,0 +1,64 @@
+name: tests
+
+# Les tests JVM protegent le CONTRAT avec le backend : les chemins des routes,
+# les noms des champs envoyes, la lecture des reponses, et ce qu'un juge lit
+# quand ca se passe mal. Sans CI ils ne tournaient que sur la machine de dev --
+# donc pas du tout, des qu'on ne pense pas a les lancer.
+#
+# Pas d'emulateur ici : il est instable, et rien de ce qui est verifie n'a
+# besoin d'un appareil Android. Voir ClimbContestApiTest.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Tests unitaires
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: L'application se compile-t-elle ?
+        run: ./gradlew assembleDebug --no-daemon
+
+      # `serverUrl` ne doit AGIR QUE sur le debug. S'il pouvait atteindre le
+      # release, une valeur posee dans gradle.properties partirait un jour sur
+      # le Play Store. Et il ne doit pas non plus faire echouer les taches
+      # debug : c'est la commande que la documentation recommande.
+      - name: serverUrl reste cantonne au debug
+        run: |
+          ./gradlew :app:assembleDebug -PserverUrl=http://192.168.0.32:5007 --no-daemon
+          ./gradlew :app:assembleRelease -PserverUrl=http://192.168.0.32:5007 --no-daemon
+          grep -q 'SERVER_URL = "https://' \
+            app/build/generated/source/buildConfig/release/com/adn/dev/climbcontest/BuildConfig.java \
+            || { echo "ECHEC : serverUrl a contamine le build release"; exit 1; }
+          echo "serverUrl n'affecte que le debug"
+
+      # Le garde-fou du build release lui-meme, sur sa propre propriete.
+      - name: Le garde-fou https tient-il ?
+        run: |
+          if ./gradlew :app:assembleRelease -PreleaseServerUrl=http://10.0.2.2:5007 \
+               --no-daemon > /tmp/sortie 2>&1; then
+            echo "ECHEC : une adresse http a ete acceptee en release"
+            exit 1
+          fi
+          grep -q "doit etre en HTTPS" /tmp/sortie \
+            || { echo "echec, mais pas pour la bonne raison :"; tail -30 /tmp/sortie; exit 1; }
+          echo "le garde-fou a bien refuse l'adresse"
+
+      - name: Rapports de test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-tests
+          path: app/build/reports/tests/

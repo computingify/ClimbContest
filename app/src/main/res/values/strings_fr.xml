@@ -18,4 +18,6 @@
     <string name="version">Version: %1$s</string>
     <string name="invalid_server_address">Error dans l\'adresse du serveur</string>
     <string name="auto_evaluate">Mode auto evalutation</string>
+    <string name="scan_reseau">Serveur injoignable. Rescannez, le code est peut-etre bon.</string>
+    <string name="rien_a_envoyer">Scannez un grimpeur et un bloc avant d\'envoyer</string>
 </resources>

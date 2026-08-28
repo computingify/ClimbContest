@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuration reseau des builds DEBUG uniquement.
+
+  Android bloque le HTTP en clair depuis Android 9. Le developpement local, lui,
+  se fait en clair : monter du TLS sur un serveur de dev que l'on relance vingt
+  fois par jour n'apporte rien.
+
+  Le trafic en clair est donc autorise ICI SANS RESTRICTION D'ADRESSE. Ce n'est
+  pas un relachement : la version precedente listait 10.0.2.2, 127.0.0.1,
+  localhost et 192.168.0.32 en dur. Or l'option « reseau » de dev-server.sh annonce l'IP
+  reelle du Mac sur le wifi du moment — celle d'une salle de competition, d'un
+  partage de connexion, d'un cafe. Des qu'elle differait, le build debug coupait
+  le trafic, et le juge ne lisait que « aucun acces au serveur » : un symptome
+  identique a celui d'un backend eteint, pour une cause completement autre.
+
+  Ce fichier n'existe QUE dans le jeu de sources debug. Le build release ne le
+  voit pas : il reste en HTTPS strict, sans exception d'aucune sorte — et son
+  adresse est en plus verifiee au moment de la compilation
+  (voir app/build.gradle.kts, bloc release).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

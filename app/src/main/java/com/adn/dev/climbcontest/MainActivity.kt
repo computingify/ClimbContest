@@ -51,10 +51,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.random.Random
 
-const val RUN_ON_EMULATOR = 0
-const val RUN_LOCAL_SERVER = 0
+// L'adresse du serveur n'est plus une constante ici : elle vient de
+// BuildConfig.SERVER_URL, choisie par le type de build et surchargeable
+// par -PserverUrl. Voir app/build.gradle.kts.
+//
+// Le raccourci RUN_ON_EMULATOR a ete retire : c'etait un `const val = 0`, donc
+// deux branches mortes qu'il fallait editer puis recompiler pour activer -- et
+// une fois activees elles tiraient un dossard dans 1..39 alors que le jeu de
+// dev en compte 98, puis forcaient le tag de bloc a "Z1", qui n'existe dans
+// aucun jeu de donnees (la convention est zone + couleur + rang : ZJ1, ZV3...).
+// Le scan aurait echoue a tous les coups. Pour piloter l'application sans
+// camera, on frappe l'API directement : voir docs/tester-avec-l-emulateur.md.
 
 class MainActivity : ComponentActivity() {
 
@@ -145,17 +153,13 @@ class MainActivity : ComponentActivity() {
                 // Handle failure...
             }
         // Initialize the server communication object
-        server = Server(mainViewModel, this, RUN_LOCAL_SERVER)
+        server = Server(mainViewModel, this)
     }
 
     private fun startScanning(scanType: String) {
         if (("climber" == scanType && null == mainViewModel.climberId.value)
             || ("bloc" == scanType && null == mainViewModel.blocId.value)
         ) {
-            if (1 == RUN_ON_EMULATOR) {
-                handleScannedValue(scanType, "")
-                return
-            }
             scanner.startScan()
                 .addOnSuccessListener { barcode ->
                     val scannedValue = barcode.displayValue ?: "Unknown"
@@ -173,45 +177,27 @@ class MainActivity : ComponentActivity() {
 
     private fun handleScannedValue(scanType: String, scannedValue: String) {
         CoroutineScope(Dispatchers.IO).launch {
-            var localScannedValue = scannedValue
-            if (1 == RUN_ON_EMULATOR) {
-                when (scanType) {
-                    "climber" -> {
-                        localScannedValue = (1..39).random().toString()
-                    }
-
-                    "bloc" -> {
-                        localScannedValue = (Random.nextInt(
-                            from = 'A'.code,
-                            until = 'N'.code + 1
-                        )).toChar() + (1..5).random().toString()
-                        localScannedValue = "Z1"
-                    }
-                }
-            }
-            val isAccepted = server.checkOnServer(scanType, localScannedValue)
+            val localScannedValue = scannedValue
+            val verdict = server.checkOnServer(scanType, localScannedValue)
             withContext(Dispatchers.Main) {
-                if (isAccepted) {
+                if (DecisionEnvoi.doitRetenirLeScan(verdict)) {
                     when (scanType) {
                         "climber" -> mainViewModel.setClimberId(localScannedValue)
                         "bloc" -> mainViewModel.setBlocId(localScannedValue)
                     }
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.id_accepted, scanType, localScannedValue),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(
-                            R.string.id_rejected_please_scan_again,
-                            scanType,
-                            localScannedValue
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
                 }
+                val texte = when (verdict) {
+                    MessageScan.ACCEPTE ->
+                        getString(R.string.id_accepted, scanType, localScannedValue)
+                    MessageScan.REFUSE ->
+                        getString(R.string.id_rejected_please_scan_again,
+                                  scanType, localScannedValue)
+                    // « Identifiant incorrect, recommencez » sur une simple
+                    // coupure reseau envoyait le juge chercher un organisateur
+                    // pour un QR parfaitement valide.
+                    MessageScan.ERREUR_RESEAU -> getString(R.string.scan_reseau)
+                }
+                Toast.makeText(this@MainActivity, texte, Toast.LENGTH_SHORT).show()
             }
         }
     }
