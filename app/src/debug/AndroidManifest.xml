@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Surcouche du manifeste pour les builds DEBUG.
+
+  Elle n'ajoute qu'une chose : l'autorisation du HTTP en clair vers les adresses
+  de developpement (voir res/xml/network_security_config.xml). Le manifeste de
+  production n'est pas touche.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:networkSecurityConfig="@xml/network_security_config"
+        tools:replace="android:networkSecurityConfig" />
+
+</manifest>

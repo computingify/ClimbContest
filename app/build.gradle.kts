@@ -21,8 +21,23 @@ android {
         }
     }
 
+    // Adresse du backend, choisie A LA COMPILATION mais surchargeable en ligne de
+    // commande -- pas de constante a editer dans le code source.
+    //
+    //   ./gradlew installDebug                                    -> backend local (emulateur)
+    //   ./gradlew installDebug -PserverUrl=https://climbcontest.adn-dev.fr
+    //   ./gradlew assembleRelease                                 -> production
     buildTypes {
+        debug {
+            // 10.0.2.2 : la machine hote vue depuis l'emulateur Android.
+            // HTTP en clair, autorise uniquement en debug par
+            // src/debug/res/xml/network_security_config.xml.
+            buildConfigField("String", "SERVER_URL",
+                "\"${project.findProperty("serverUrl") ?: "http://10.0.2.2:5007"}\"")
+        }
         release {
+            buildConfigField("String", "SERVER_URL",
+                "\"${project.findProperty("serverUrl") ?: "https://climbcontestserver.onrender.com"}\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -44,6 +59,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true          // pour SERVER_URL
     }
     packaging {
         resources {

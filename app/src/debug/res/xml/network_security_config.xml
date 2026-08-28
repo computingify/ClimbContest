@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Configuration reseau des builds DEBUG uniquement.
+
+  Android bloque le HTTP en clair depuis Android 9. Pour tester contre un
+  backend local, il faut l'autoriser explicitement, et seulement pour les
+  adresses de developpement.
+
+  10.0.2.2 est l'adresse par laquelle l'emulateur Android voit la machine hote :
+  c'est le « localhost du Mac » vu depuis l'emulateur.
+
+  Ce fichier n'existe QUE dans le jeu de sources debug. Le build release ne le
+  voit pas : il reste en HTTPS strict, sans exception d'aucune sorte.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- La machine hote, vue depuis l'emulateur -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- La VM 110, pour tester depuis un telephone reel sur le LAN -->
+        <domain includeSubdomains="false">192.168.0.32</domain>
+        <!-- localhost, si on lance l'app avec un tunnel adb -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

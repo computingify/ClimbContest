@@ -53,8 +53,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
+// L'adresse du serveur n'est plus une constante ici : elle vient de
+// BuildConfig.SERVER_URL, choisie par le type de build et surchargeable
+// par -PserverUrl. Voir app/build.gradle.kts.
 const val RUN_ON_EMULATOR = 0
-const val RUN_LOCAL_SERVER = 0
 
 class MainActivity : ComponentActivity() {
 
@@ -145,7 +147,7 @@ class MainActivity : ComponentActivity() {
                 // Handle failure...
             }
         // Initialize the server communication object
-        server = Server(mainViewModel, this, RUN_LOCAL_SERVER)
+        server = Server(mainViewModel, this)
     }
 
     private fun startScanning(scanType: String) {

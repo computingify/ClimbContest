@@ -14,7 +14,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import kotlinx.coroutines.delay
 
-class Server(private val mainViewModel: MainViewModel, private val context: Context, private val RUN_LOCAL_SERVER: Int) {
+class Server(private val mainViewModel: MainViewModel, private val context: Context) {
 
     // Create a custom OkHttpClient with self-signed certificate support
     private var client = createDefaultHttpClient()
@@ -120,12 +120,11 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
 
 
     private fun sendPostToServer(payload: JSONObject, requestedApi: String): ServerResponse{
-        var url = if (1 == RUN_LOCAL_SERVER) {
-            "https://10.0.2.2"
-        } else {
-            "https://climbcontestserver.onrender.com"
-        }
-        url += "/api/v2/contest/$requestedApi"
+        // L'adresse vient de BuildConfig, pas d'une constante dans le code :
+        //   debug   -> http://10.0.2.2:5007  (la machine hote, vue de l'emulateur)
+        //   release -> l'adresse publique
+        // Surchargeable a la compilation : ./gradlew installDebug -PserverUrl=...
+        val url = "${BuildConfig.SERVER_URL}/api/v2/contest/$requestedApi"
 
         // Convert payload to JSON string and create request body
         val requestBody: RequestBody = payload.toString().toRequestBody("application/json".toMediaTypeOrNull())
@@ -157,9 +156,16 @@ class Server(private val mainViewModel: MainViewModel, private val context: Cont
     }
 
     private fun createDefaultHttpClient(): OkHttpClient {
-        return OkHttpClient.Builder()
-            .hostnameVerifier { _, _ -> true } // Disable hostname verification for development
-            .build()
+        // La verification du nom d'hote n'est PLUS desactivee. Elle l'etait a
+        // l'epoque du certificat auto-signe du Raspberry Pi ; depuis, le serveur
+        // presente un vrai certificat Let's Encrypt. La laisser desactivee
+        // revenait a accepter n'importe quel certificat valide pour n'importe
+        // quel domaine -- une interception sur un reseau hostile passait sans
+        // bruit. Risque R10 de l'etat des lieux.
+        //
+        // Le developpement local n'en a plus besoin non plus : il passe en HTTP
+        // en clair vers 10.0.2.2, autorise seulement dans les builds debug.
+        return OkHttpClient.Builder().build()
     }
 
 }
