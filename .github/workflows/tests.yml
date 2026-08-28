@@ -10,7 +10,7 @@ name: tests
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
 
 jobs:
   tests:
@@ -31,12 +31,23 @@ jobs:
       - name: L'application se compile-t-elle ?
         run: ./gradlew assembleDebug --no-daemon
 
-      # Le garde-fou du build release : il doit refuser une adresse qui n'est
-      # pas en https, sinon un serverUrl pose dans gradle.properties partirait
-      # un jour sur le Play Store. On verifie que l'echec arrive vraiment.
+      # `serverUrl` ne doit AGIR QUE sur le debug. S'il pouvait atteindre le
+      # release, une valeur posee dans gradle.properties partirait un jour sur
+      # le Play Store. Et il ne doit pas non plus faire echouer les taches
+      # debug : c'est la commande que la documentation recommande.
+      - name: serverUrl reste cantonne au debug
+        run: |
+          ./gradlew :app:assembleDebug -PserverUrl=http://192.168.0.32:5007 --no-daemon
+          ./gradlew :app:assembleRelease -PserverUrl=http://192.168.0.32:5007 --no-daemon
+          grep -q 'SERVER_URL = "https://' \
+            app/build/generated/source/buildConfig/release/com/adn/dev/climbcontest/BuildConfig.java \
+            || { echo "ECHEC : serverUrl a contamine le build release"; exit 1; }
+          echo "serverUrl n'affecte que le debug"
+
+      # Le garde-fou du build release lui-meme, sur sa propre propriete.
       - name: Le garde-fou https tient-il ?
         run: |
-          if ./gradlew :app:assembleRelease -PserverUrl=http://10.0.2.2:5007 \
+          if ./gradlew :app:assembleRelease -PreleaseServerUrl=http://10.0.2.2:5007 \
                --no-daemon > /tmp/sortie 2>&1; then
             echo "ECHEC : une adresse http a ete acceptee en release"
             exit 1

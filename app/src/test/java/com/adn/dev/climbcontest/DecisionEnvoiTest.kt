@@ -74,10 +74,52 @@ class DecisionEnvoiTest {
 
     @Test
     fun `un 500 est presente comme une panne, pas comme un refus`() {
-        // Chaine complete : ce que ClimbContestApi produit sur un 5xx doit
-        // ressortir ici en « reessaie ».
+        // Ce test couvre UNIQUEMENT la traduction : on lui donne a la main ce
+        // que ClimbContestApi est cense produire sur un 5xx. Que l'API le
+        // produise vraiment est verifie ailleurs, avec un serveur factice
+        // (ClimbContestApiTest, « une erreur 500 est traitee comme une panne »).
         val cinqCents = ApiResult.Echec("An error occurred", codeHttp = 500, reseau = true)
         assertEquals(MessageJuge.ERREUR_RESEAU, DecisionEnvoi.apresEnvoi(cinqCents))
+    }
+
+    // --- Le scan, avant même l'envoi ------------------------------------------
+
+    @Test
+    fun `un scan reconnu est accepte`() {
+        assertEquals(MessageScan.ACCEPTE,
+            DecisionEnvoi.apresScan(ApiResult.Succes("Dupont Lea")))
+    }
+
+    @Test
+    fun `un qr refuse par le serveur dit de rescanner`() {
+        val refus = ApiResult.Echec("Dossard 999 inconnu", codeHttp = 400)
+        assertEquals(MessageScan.REFUSE, DecisionEnvoi.apresScan(refus))
+    }
+
+    @Test
+    fun `une coupure reseau au scan ne dit pas que le code est mauvais`() {
+        // Le defaut d'origine : « Identifiant incorrect. Recommencez. » sur un
+        // wifi qui hoquette. Le juge en concluait que le grimpeur n'etait pas
+        // inscrit et allait chercher un organisateur, pour un QR valide.
+        val panne = ApiResult.Echec("Aucun acces au serveur", reseau = true)
+        assertEquals(MessageScan.ERREUR_RESEAU, DecisionEnvoi.apresScan(panne))
+    }
+
+    @Test
+    fun `un 500 au scan est une panne, pas un refus`() {
+        val cinqCents = ApiResult.Echec("boom", codeHttp = 500, reseau = true)
+        assertEquals(MessageScan.ERREUR_RESEAU, DecisionEnvoi.apresScan(cinqCents))
+    }
+
+    @Test
+    fun `seul un scan accepte est retenu`() {
+        // Retenir un scan non confirme laisserait le juge envoyer un dossard
+        // que le serveur n'a jamais valide.
+        assertTrue(DecisionEnvoi.doitRetenirLeScan(MessageScan.ACCEPTE))
+        for (autre in MessageScan.entries.filter { it != MessageScan.ACCEPTE }) {
+            assertFalse("$autre ne doit pas etre retenu",
+                DecisionEnvoi.doitRetenirLeScan(autre))
+        }
     }
 
     // --- Ce qui efface l'écran ------------------------------------------------

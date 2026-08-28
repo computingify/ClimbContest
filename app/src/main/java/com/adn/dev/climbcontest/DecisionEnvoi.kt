@@ -28,6 +28,24 @@ enum class MessageJuge {
     ENVOI_REFUSE,
 }
 
+/** Ce que le juge doit lire après avoir scanné un QR code. */
+enum class MessageScan {
+    /** Le QR est reconnu par le serveur. */
+    ACCEPTE,
+
+    /**
+     * Le serveur a compris et répond que ce QR ne correspond à rien.
+     * Rescanner, ou aller voir un organisateur.
+     */
+    REFUSE,
+
+    /**
+     * On n'a pas pu joindre le serveur. Le QR est peut-être parfaitement bon —
+     * on n'en sait rien. Le juge doit **réessayer**, pas conclure.
+     */
+    ERREUR_RESEAU,
+}
+
 /**
  * La logique de décision de l'écran d'envoi, isolée de l'interface.
  *
@@ -55,6 +73,24 @@ object DecisionEnvoi {
         is ApiResult.Echec ->
             if (resultat.reseau) MessageJuge.ERREUR_RESEAU else MessageJuge.ENVOI_REFUSE
     }
+
+    /**
+     * Traduit la réponse d'un scan.
+     *
+     * La distinction est la même qu'à l'envoi, et pour la même raison — mais
+     * elle manquait ici, à l'étape qui vient **avant**. Un wifi qui hoquette
+     * affichait « Identifiant incorrect. Recommencez. » Le juge en concluait
+     * que le QR était mauvais ou que le grimpeur n'était pas inscrit, et allait
+     * chercher un organisateur. Rien ne lui disait de réessayer.
+     */
+    fun apresScan(resultat: ApiResult): MessageScan = when (resultat) {
+        is ApiResult.Succes -> MessageScan.ACCEPTE
+        is ApiResult.Echec ->
+            if (resultat.reseau) MessageScan.ERREUR_RESEAU else MessageScan.REFUSE
+    }
+
+    /** Un scan n'est retenu que s'il a été confirmé par le serveur. */
+    fun doitRetenirLeScan(message: MessageScan): Boolean = message == MessageScan.ACCEPTE
 
     /**
      * L'écran ne se vide **que** sur un succès confirmé.

@@ -36,13 +36,22 @@ android {
                 "\"${project.findProperty("serverUrl") ?: "http://10.0.2.2:5007"}\"")
         }
         release {
-            // findProperty lit la ligne de commande MAIS AUSSI gradle.properties,
-            // ~/.gradle/gradle.properties et les reglages de l'IDE. Un
-            // « serverUrl=http://10.0.2.2:5007 » pose un jour pour se simplifier
-            // les tests produirait, trois semaines plus tard, un APK Play Store
-            // pointant sur la machine de dev -- et qui echouerait a chaque scan,
-            // le cleartext etant bloque en release. Rien ne le detecterait.
-            val urlRelease = (project.findProperty("serverUrl")
+            // Le release lit `releaseServerUrl`, PAS `serverUrl`. Deux raisons,
+            // et la seconde a ete trouvee a la relecture :
+            //
+            // 1. findProperty lit la ligne de commande MAIS AUSSI
+            //    gradle.properties, ~/.gradle/gradle.properties et les reglages
+            //    de l'IDE. Un « serverUrl=http://10.0.2.2:5007 » pose un jour
+            //    pour se simplifier les tests produirait, trois semaines plus
+            //    tard, un APK Play Store pointant sur la machine de dev. Avec
+            //    deux noms distincts, c'est structurellement impossible.
+            //
+            // 2. Ce bloc est evalue a la CONFIGURATION de Gradle, pour
+            //    n'importe quelle tache. Un `require()` portant sur `serverUrl`
+            //    faisait donc echouer `installDebug -PserverUrl=http://...` --
+            //    la commande meme que docs/tester-avec-l-emulateur.md
+            //    recommande pour tester depuis un telephone du wifi.
+            val urlRelease = (project.findProperty("releaseServerUrl")
                 ?: "https://climbcontestserver.onrender.com").toString()
             require(urlRelease.startsWith("https://")) {
                 "L'adresse d'un build release doit etre en HTTPS, obtenu : $urlRelease"

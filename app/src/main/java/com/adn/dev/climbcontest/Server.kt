@@ -30,31 +30,25 @@ class Server(
      *
      * Appelé depuis un contexte d'entrée/sortie : bloquant, volontairement.
      */
-    fun checkOnServer(scanType: String, scannedValue: String): Boolean {
+    fun checkOnServer(scanType: String, scannedValue: String): MessageScan {
         val resultat = when (scanType) {
             "climber" -> api.verifierGrimpeur(scannedValue)
             "bloc" -> api.verifierBloc(scannedValue)
-            else -> return false
+            else -> return MessageScan.REFUSE
         }
 
-        return when (resultat) {
-            is ApiResult.Succes -> {
-                if (resultat.libelle.isNotEmpty()) {
-                    when (scanType) {
-                        // Cote grimpeur, le serveur renvoie son NOM : c'est ce
-                        // que le juge lit a l'ecran pour confirmer qu'il a scanne
-                        // la bonne personne.
-                        "climber" -> mainViewModel.setClimberName(resultat.libelle)
-                        "bloc" -> mainViewModel.setBlocName(resultat.libelle)
-                    }
-                }
-                true
-            }
-            is ApiResult.Echec -> {
-                println("ClimbContest: ${resultat.message}")
-                false
+        if (resultat is ApiResult.Succes && resultat.libelle.isNotEmpty()) {
+            when (scanType) {
+                // Cote grimpeur, le serveur renvoie son NOM : c'est ce que le
+                // juge lit a l'ecran pour confirmer qu'il a scanne la bonne
+                // personne.
+                "climber" -> mainViewModel.setClimberName(resultat.libelle)
+                "bloc" -> mainViewModel.setBlocName(resultat.libelle)
             }
         }
+        if (resultat is ApiResult.Echec) println("ClimbContest: ${resultat.message}")
+
+        return DecisionEnvoi.apresScan(resultat)
     }
 
     /**

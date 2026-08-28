@@ -178,29 +178,26 @@ class MainActivity : ComponentActivity() {
     private fun handleScannedValue(scanType: String, scannedValue: String) {
         CoroutineScope(Dispatchers.IO).launch {
             val localScannedValue = scannedValue
-            val isAccepted = server.checkOnServer(scanType, localScannedValue)
+            val verdict = server.checkOnServer(scanType, localScannedValue)
             withContext(Dispatchers.Main) {
-                if (isAccepted) {
+                if (DecisionEnvoi.doitRetenirLeScan(verdict)) {
                     when (scanType) {
                         "climber" -> mainViewModel.setClimberId(localScannedValue)
                         "bloc" -> mainViewModel.setBlocId(localScannedValue)
                     }
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.id_accepted, scanType, localScannedValue),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(
-                            R.string.id_rejected_please_scan_again,
-                            scanType,
-                            localScannedValue
-                        ),
-                        Toast.LENGTH_SHORT
-                    ).show()
                 }
+                val texte = when (verdict) {
+                    MessageScan.ACCEPTE ->
+                        getString(R.string.id_accepted, scanType, localScannedValue)
+                    MessageScan.REFUSE ->
+                        getString(R.string.id_rejected_please_scan_again,
+                                  scanType, localScannedValue)
+                    // « Identifiant incorrect, recommencez » sur une simple
+                    // coupure reseau envoyait le juge chercher un organisateur
+                    // pour un QR parfaitement valide.
+                    MessageScan.ERREUR_RESEAU -> getString(R.string.scan_reseau)
+                }
+                Toast.makeText(this@MainActivity, texte, Toast.LENGTH_SHORT).show()
             }
         }
     }
