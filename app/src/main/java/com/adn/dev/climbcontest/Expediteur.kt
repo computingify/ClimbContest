@@ -68,6 +68,13 @@ data class BilanEnvoi(
     val envoyees: Int,
     val refusees: List<RefusServeur>,
     val restantes: Int,
+    /**
+     * Les references sur lesquelles le serveur a statue, refus compris.
+     *
+     * Sert au journal des scans : c'est ce qui lui permet de passer une ligne
+     * de « en attente » a « partie ». La file, elle, s'en occupe deja seule.
+     */
+    val acquittees: Set<String> = emptySet(),
     /** Total des refusees mises de cote, en attente d'une decision humaine. */
     val misesDeCote: Int = 0,
     val echec: String? = null,
@@ -92,6 +99,11 @@ data class BilanEnvoi(
 class Expediteur(
     private val file: FileDeReussites,
     private val api: ClimbContestApi,
+    /**
+     * Qui envoie. Relu a chaque lot : le juge peut renommer son telephone en
+     * pleine competition, et le nom enregistre doit etre celui du moment.
+     */
+    private val identite: () -> IdentiteAppareil? = { null },
 ) {
     var echecsConsecutifs: Int = 0
         private set
@@ -103,8 +115,11 @@ class Expediteur(
      * manquant -- le cas de loin le plus frequent : « ce dossard n'existe pas
      * ENCORE ».
      */
-    fun renvoyerLesRefusees(): Int =
-        file.renvoyerLesRefusees { java.util.UUID.randomUUID().toString() }
+    fun renvoyerLesRefusees(surReprise: (String, String) -> Unit = { _, _ -> }): Int =
+        file.renvoyerLesRefusees(
+            nouvelleRef = { java.util.UUID.randomUUID().toString() },
+            surReprise = surReprise,
+        )
 
     /** Tente un envoi. Renvoie `null` s'il n'y avait rien à envoyer. */
     fun tenter(): BilanEnvoi? {
@@ -112,7 +127,7 @@ class Expediteur(
         if (enAttente == 0) return null
 
         val lot = file.prochainLot(PolitiqueEnvoi.tailleLot(enAttente))
-        val resultat = api.envoyerLot(lot)
+        val resultat = api.envoyerLot(lot, identite())
 
         if (!resultat.aReussi) {
             echecsConsecutifs++
@@ -139,6 +154,7 @@ class Expediteur(
             envoyees = resultat.acquittees.size - resultat.refusees.size,
             refusees = resultat.refusees,
             restantes = file.nombreEnAttente(),
+            acquittees = resultat.acquittees,
             misesDeCote = file.nombreRefusees(),
             catalogueVersion = resultat.catalogueVersion,
         )

@@ -134,4 +134,60 @@ class DecisionEnvoiTest {
                 DecisionEnvoi.doitReinitialiser(autre))
         }
     }
+
+    // --- Ce que le journal des scans retient d'un envoi (spec 011) ----------
+
+    private fun bilan(acquittees: Set<String>, refusees: List<RefusServeur>) =
+        BilanEnvoi(envoyees = acquittees.size - refusees.size, refusees = refusees,
+                   restantes = 0, acquittees = acquittees)
+
+    @Test
+    fun `un envoi propre fait passer chaque reference a partie`() {
+        val suites = DecisionEnvoi.pourLeJournal(bilan(setOf("r1", "r2"), emptyList()))
+
+        assertEquals(2, suites.size)
+        assertTrue(suites.all { it.etat == EtatScan.PARTIE })
+        assertTrue(suites.all { it.motif == null })
+    }
+
+    /**
+     * La regle qui compte. Une reussite refusee est AUSSI acquittee : le serveur
+     * a statue sur elle, donc elle quitte la file. Si l'acquittement l'emportait,
+     * le journal afficherait « arrive » a cote d'un scan que le serveur vient de
+     * rejeter.
+     */
+    @Test
+    fun `un refus l'emporte sur l'acquittement qui l'accompagne`() {
+        val suites = DecisionEnvoi.pourLeJournal(
+            bilan(setOf("r1", "r2"), listOf(RefusServeur("r2", "dossard inconnu")))
+        )
+
+        assertEquals(EtatScan.PARTIE, suites.first { it.ref == "r1" }.etat)
+        val refusee = suites.first { it.ref == "r2" }
+        assertEquals(EtatScan.REFUSEE, refusee.etat)
+        assertEquals("dossard inconnu", refusee.motif)
+    }
+
+    @Test
+    fun `un envoi rate ne dit rien au journal`() {
+        // Rien n'est acquitte : la file garde tout, et le journal ne bouge pas.
+        // Surtout pas pour passer les scans a « refuse » -- ils repartiront.
+        val rate = BilanEnvoi(envoyees = 0, refusees = emptyList(), restantes = 3,
+                              echec = "Serveur injoignable")
+
+        assertEquals(emptyList<SuiteDeScan>(), DecisionEnvoi.pourLeJournal(rate))
+    }
+
+    @Test
+    fun `un refus sans acquittement correspondant est ignore`() {
+        // Ne devrait pas arriver -- l'Expediteur acquitte tout ce qu'il refuse.
+        // Mais inventer une entree pour une reference dont on ne sait rien
+        // serait pire que de ne rien faire.
+        val suites = DecisionEnvoi.pourLeJournal(
+            bilan(setOf("r1"), listOf(RefusServeur("inconnue", "peu importe")))
+        )
+
+        assertEquals(listOf("r1"), suites.map { it.ref })
+        assertEquals(EtatScan.PARTIE, suites.single().etat)
+    }
 }

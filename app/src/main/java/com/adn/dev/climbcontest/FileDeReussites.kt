@@ -161,10 +161,24 @@ class FileDeReussites(dossier: File) {
      * déjà été acquittée, et la réutiliser les ferait disparaître aussitôt.
      */
     @Synchronized
-    fun renvoyerLesRefusees(nouvelleRef: () -> String): Int {
+    fun renvoyerLesRefusees(
+        nouvelleRef: () -> String,
+        /**
+         * Prevenu de chaque renumerotation, ancienne puis nouvelle reference.
+         *
+         * Le journal des scans en a besoin : sans ca, il garderait « refusee »
+         * pour un scan finalement arrive, et montrerait au juge le contraire de
+         * la verite. Facultatif — la file marche sans que personne n'ecoute.
+         */
+        surReprise: (String, String) -> Unit = { _, _ -> },
+    ): Int {
         val aRenvoyer = refusees()
         if (aRenvoyer.isEmpty()) return 0
-        aRenvoyer.forEach { journal.ajouter(it.copy(ref = nouvelleRef()).versJson()) }
+        aRenvoyer.forEach {
+            val nouvelle = nouvelleRef()
+            journal.ajouter(it.copy(ref = nouvelle).versJson())
+            surReprise(it.ref, nouvelle)
+        }
         refuses.remplacer(emptyList())
         return aRenvoyer.size
     }

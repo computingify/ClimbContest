@@ -72,6 +72,51 @@ class ClimbContestApiTest {
         assertFalse(api.estJoignable())
     }
 
+    // --- L'identite du telephone dans le lot (spec 011) ---------------------
+
+    private fun unLot() = listOf(
+        ReussiteEnAttente(ref = "a", dossard = "1", bloc = "ZJ6",
+                          scanneLe = "2026-11-08T10:00:00Z")
+    )
+
+    @Test
+    fun `un lot porte l'identite du telephone`() {
+        repondre(200, JSONObject().put("success", true)
+            .put("resultats", org.json.JSONArray()).toString())
+
+        api.envoyerLot(unLot(), IdentiteAppareil("8f3c1d20", "Mur jaune"))
+
+        val corps = JSONObject(serveur.takeRequest().body!!.utf8())
+        val appareil = corps.getJSONObject("appareil")
+        assertEquals("8f3c1d20", appareil.getString("id"))
+        assertEquals("Mur jaune", appareil.getString("nom"))
+    }
+
+    @Test
+    fun `un telephone sans nom envoie quand meme son identifiant`() {
+        repondre(200, JSONObject().put("success", true)
+            .put("resultats", org.json.JSONArray()).toString())
+
+        api.envoyerLot(unLot(), IdentiteAppareil("8f3c1d20", null))
+
+        val appareil = JSONObject(serveur.takeRequest().body!!.utf8())
+            .getJSONObject("appareil")
+        assertEquals("8f3c1d20", appareil.getString("id"))
+        assertFalse(appareil.has("nom"))
+    }
+
+    @Test
+    fun `sans identite, le corps n'a pas de champ appareil`() {
+        // C'est ce qui permet de livrer les deux cotes separement : le serveur
+        // accepte un lot sans identite, exactement comme avant la spec 011.
+        repondre(200, JSONObject().put("success", true)
+            .put("resultats", org.json.JSONArray()).toString())
+
+        api.envoyerLot(unLot())
+
+        assertFalse(JSONObject(serveur.takeRequest().body!!.utf8()).has("appareil"))
+    }
+
     private fun repondre(code: Int, corps: String) {
         serveur.enqueue(
             MockResponse.Builder()

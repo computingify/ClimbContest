@@ -144,12 +144,22 @@ class ClimbContestApi(
      * été traitée : l'appelant doit la garder en file. Le défaut est de garder —
      * perdre une réussite est le seul résultat inacceptable.
      */
-    fun envoyerLot(reussites: List<ReussiteEnAttente>): ResultatLot {
+    fun envoyerLot(
+        reussites: List<ReussiteEnAttente>,
+        /**
+         * Qui envoie (spec 011). Facultatif : le serveur accepte un lot sans
+         * identite, et c'est ce qui permet de livrer les deux cotes
+         * separement.
+         */
+        appareil: IdentiteAppareil? = null,
+    ): ResultatLot {
         if (reussites.isEmpty()) return ResultatLot(emptySet(), emptyList(), null)
 
         val items = JSONArray()
         reussites.forEach { items.put(JSONObject(it.versJson())) }
-        val corps = JSONObject().put("items", items)
+        val corps = JSONObject()
+            .put("items", items)
+            .apply { appareil?.let { put("appareil", JSONObject(it.versJson())) } }
 
         val requete = Request.Builder()
             .url("$baseUrl/api/v3/successes")
