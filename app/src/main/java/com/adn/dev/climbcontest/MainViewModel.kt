@@ -79,15 +79,30 @@ class MainViewModel : ViewModel() {
     /**
      * Le serveur répond-il ?
      *
-     * `null` tant qu'on n'a rien tenté. Un juge n'apprenait l'existence d'un
-     * problème réseau qu'au moment où quelque chose échouait — donc au pire
-     * moment, en plein geste.
+     * Trois états, et `null` en est un à part entière : **on est en train de
+     * vérifier**. Ce n'est pas « on ne sait pas et on s'en accommode » — c'est
+     * l'état affiché à la reprise de l'application, le temps d'un aller-retour.
+     *
+     * Un juge n'apprenait l'existence d'un problème réseau qu'au moment où
+     * quelque chose échouait — donc au pire moment, en plein geste.
      */
     private val _serveurJoignable = MutableStateFlow<Boolean?>(null)
     val serveurJoignable: StateFlow<Boolean?> = _serveurJoignable
 
     fun setServeurJoignable(joignable: Boolean) {
         _serveurJoignable.value = joignable
+    }
+
+    /**
+     * « Je vérifie. »
+     *
+     * Posé au retour au premier plan, **avant** l'aller-retour avec le serveur.
+     * Sans lui, la première image affichée serait l'état d'avant la mise en
+     * arrière-plan — un vert vieux de vingt minutes, le temps que la réponse
+     * arrive. Un voyant qui ment une demi-seconde ment quand même.
+     */
+    fun setServeurEnVerification() {
+        _serveurJoignable.value = null
     }
 
     fun setClimberId(id: String?) {
