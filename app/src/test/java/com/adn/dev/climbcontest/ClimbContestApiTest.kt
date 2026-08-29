@@ -6,6 +6,7 @@ import okhttp3.OkHttpClient
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -46,6 +47,29 @@ class ClimbContestApiTest {
     @After
     fun arreter() {
         serveur.close()
+    }
+
+    // --- Le voyant « serveur joignable » de la barre du haut ---------------
+
+    @Test
+    fun `un serveur en bonne sante est joignable`() {
+        repondre(200, JSONObject().put("status", "ok").toString())
+        assertTrue(api.estJoignable())
+        assertEquals("/health", serveur.takeRequest().target)
+    }
+
+    @Test
+    fun `un serveur degrade n'est pas annonce joignable`() {
+        // /health repond 503 quand la base est inutilisable. Le serveur parle,
+        // mais il refusera tout : pour le juge, c'est la meme chose qu'absent.
+        repondre(503, JSONObject().put("status", "degraded").toString())
+        assertFalse(api.estJoignable())
+    }
+
+    @Test
+    fun `un serveur eteint n'est pas joignable`() {
+        serveur.close()
+        assertFalse(api.estJoignable())
     }
 
     private fun repondre(code: Int, corps: String) {

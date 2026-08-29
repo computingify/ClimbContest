@@ -39,6 +39,7 @@ class Server(
 
     @Volatile private var dernierEnvoiMs = 0L
     @Volatile private var dernierRafraichissementMs = 0L
+    @Volatile private var dernierContactMs = 0L
     @Volatile private var versionServeurConnue: Int? = null
 
     init {
@@ -61,6 +62,7 @@ class Server(
                 delay(1_000)
                 envoyerSiNecessaire()
                 rafraichirSiNecessaire()
+                verifierPresenceSiNecessaire()
             }
         }
     }
@@ -130,6 +132,14 @@ class Server(
                         dossard = dossard!!, bloc = bloc!!,
                         scanneLe = horodatage(),
                     ))
+                    // Au journal de l'ecran, pour que le juge puisse relire ce
+                    // qu'il vient de faire. C'est la reponse a « est-ce que j'ai
+                    // bien envoye ? », qui n'en avait aucune.
+                    mainViewModel.ajouterAuJournal(Validation(
+                        grimpeur = mainViewModel.climberName.value ?: "dossard $dossard",
+                        bloc = mainViewModel.blocName.value ?: bloc!!,
+                        heure = heureCourte(),
+                    ))
                     MessageJuge.VALIDE
                 } catch (e: Exception) {
                     // Disque plein, dossier inaccessible. On ne dit surtout pas
@@ -192,6 +202,33 @@ class Server(
         }
     }
 
+    /**
+     * Tient le voyant « serveur joignable » a jour quand rien d'autre ne parle.
+     *
+     * Il ne se mettait a jour qu'a l'occasion d'un echange utile : un envoi --
+     * il n'y en a que si le juge scanne -- ou le rafraichissement du catalogue,
+     * toutes les CINQ minutes. Un telephone pose sur une table pendant que le
+     * point d'acces tombe affichait donc « Serveur joignable » pendant cinq
+     * minutes, alors qu'il ne l'etait plus. C'est exactement le moment ou le
+     * voyant devait servir.
+     *
+     * Le cout est negligeable : une requete de ~200 octets toutes les
+     * [PERIODE_PRESENCE_MS] et par telephone, soit moins d'une requete par
+     * seconde pour les vingt-cinq telephones d'une competition -- a comparer
+     * aux soixante telephones de spectateurs qui rafraichissent le classement
+     * toutes les quinze secondes.
+     *
+     * Elle est evitee des qu'autre chose vient de parler : un juge qui scanne
+     * en continu ne genere aucune requete supplementaire.
+     */
+    private fun verifierPresenceSiNecessaire() {
+        val maintenant = System.currentTimeMillis()
+        val dernier = maxOf(dernierContactMs, dernierEnvoiMs, dernierRafraichissementMs)
+        if (maintenant - dernier < PERIODE_PRESENCE_MS) return
+        dernierContactMs = maintenant
+        mainViewModel.setServeurJoignable(api.estJoignable())
+    }
+
     private fun envoyerSiNecessaire(): BilanEnvoi? = envoyer(forcer = false)
 
     private fun envoyer(forcer: Boolean): BilanEnvoi? {
@@ -202,6 +239,9 @@ class Server(
         }
         dernierEnvoiMs = System.currentTimeMillis()
         val bilan = expediteur.tenter()
+        // Ce que le juge doit savoir AVANT que quelque chose echoue : le
+        // serveur repond-il ? Il ne l'apprenait qu'en plein geste.
+        bilan?.let { mainViewModel.setServeurJoignable(it.aReussi) }
         bilan?.catalogueVersion?.let { versionServeurConnue = it }
         mainViewModel.setEnAttente(file.nombreEnAttente())
         mainViewModel.setRefusees(file.nombreRefusees())
@@ -225,12 +265,24 @@ class Server(
             is ResultatCatalogue.Recu -> {
                 depotCatalogue.enregistrer(r.catalogue)
                 versionServeurConnue = r.catalogue.version
+                mainViewModel.setServeurJoignable(true)
             }
             // 304 : rien n'a bouge. ~150 octets, et c'est le cas le plus frequent.
-            is ResultatCatalogue.DejaAJour -> versionServeurConnue = version
-            is ResultatCatalogue.Echec -> println("ClimbContest: ${r.message}")
+            is ResultatCatalogue.DejaAJour -> {
+                versionServeurConnue = version
+                mainViewModel.setServeurJoignable(true)
+            }
+            is ResultatCatalogue.Echec -> {
+                println("ClimbContest: ${r.message}")
+                if (r.reseau) mainViewModel.setServeurJoignable(false)
+            }
         }
     }
+
+    /** L'heure, pour le journal a l'ecran. Le juge lit « 10:42 », pas un ISO. */
+    private fun heureCourte(): String =
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE)
+            .format(java.util.Date())
 
     private fun horodatage(): String =
         java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
@@ -247,4 +299,14 @@ class Server(
 
     private fun toast(res: Int) =
         Toast.makeText(context, context.getString(res), Toast.LENGTH_SHORT).show()
+
+    companion object {
+        /**
+         * Trente secondes : le voyant peut mentir au plus une demi-minute.
+         *
+         * Assez court pour qu'un juge s'en apercoive avant d'avoir scanne dix
+         * grimpeurs, assez long pour ne rien peser sur le reseau de la salle.
+         */
+        const val PERIODE_PRESENCE_MS = 30_000L
+    }
 }

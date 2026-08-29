@@ -1,122 +1,251 @@
 import android.content.Context
-import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.adn.dev.climbcontest.BuildConfig
 import com.adn.dev.climbcontest.MainViewModel
 import com.adn.dev.climbcontest.R
+import com.adn.dev.climbcontest.ui.theme.Alerte
+import com.adn.dev.climbcontest.ui.theme.Attention
+import com.adn.dev.climbcontest.ui.theme.Carte
+import com.adn.dev.climbcontest.ui.theme.Encre
+import com.adn.dev.climbcontest.ui.theme.Encre2
+import com.adn.dev.climbcontest.ui.theme.EtatFait
+import com.adn.dev.climbcontest.ui.theme.EtatVide
 
+/**
+ * Les réglages, et l'état de ce qui n'est pas encore parti.
+ *
+ * L'écran n'avait ni titre ni flèche de retour : on n'en sortait que par le
+ * geste système, et rien ne disait où on était. Il ouvrait aussi sur le numéro
+ * de version — l'information la moins utile de l'écran, en haut à gauche.
+ *
+ * L'ordre suit ce qu'un bénévole vient y chercher : régler la saisie, vider la
+ * file en fin de compétition, vérifier à quel serveur le téléphone parle.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     mainViewModel: MainViewModel,
-    context: Context, // Pass the context to retrieve version name
+    context: Context,
     onToutEnvoyer: () -> Unit = {},
     onRenvoyerRefusees: () -> Unit = {},
 ) {
     var checked by remember { mutableStateOf(mainViewModel.autoEval) }
     val enAttente by mainViewModel.enAttente.collectAsState()
     val refusees by mainViewModel.refusees.collectAsState()
+    val serveurJoignable by mainViewModel.serveurJoignable.collectAsState()
 
-    // Retrieve the app version name from the context
     val versionName = remember {
         try {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
         } catch (e: Exception) {
-            null // Return null if an exception occurs
+            null
         }
     }
 
-    // Handle the Android back button
-    BackHandler {
-        onBack()
-    }
+    BackHandler { onBack() }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // Display the version name on the top left corner
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = stringResource(R.string.version, versionName ?: "N/A"),
-                color = Color.Gray,
-                fontSize = 12.sp,
-                modifier = Modifier.align(Alignment.TopStart)
-            )
-        }
+        TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = Carte,
+                titleContentColor = Encre,
+            ),
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.back),
+                        tint = Encre,
+                    )
+                }
+            },
+            title = { Text(stringResource(R.string.reglages), fontSize = 20.sp) },
+        )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Add the Switch button for autoEvaluate
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
         ) {
-            Text(text = stringResource(R.string.auto_evaluate), fontSize = 16.sp)
-            Switch(
-                checked = checked,
-                onCheckedChange = {
-                    checked = it
-                    Log.d("DEBUG", "onCheckedChange: $checked")
-                    when (checked) {
-                        true -> mainViewModel.enableAutoEval()
-                        false -> mainViewModel.disableAutoEval()
+            Spacer(Modifier.height(16.dp))
+
+            Section(stringResource(R.string.reglages_saisie)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = stringResource(R.string.auto_evaluate),
+                            fontSize = 16.sp,
+                            color = Encre,
+                        )
+                        // Le nom seul ne dit pas ce que ça fait. Un bénévole qui
+                        // ouvre les réglages le jour J n'a pas le temps
+                        // d'essayer pour voir.
+                        Text(
+                            text = stringResource(R.string.auto_evaluate_detail),
+                            fontSize = 13.sp,
+                            color = Encre2,
+                        )
                     }
-                    mainViewModel.reset()
+                    // L'interrupteur par defaut de Material 3 en sombre est
+                    // presque invisible eteint : sa piste est `surfaceVariant`,
+                    // a deux points de gris de la carte qui la porte. Or c'est
+                    // exactement l'etat qu'un benevole doit pouvoir lire d'un
+                    // coup d'oeil. On reprend les memes couleurs d'etat que le
+                    // reste de l'application : vert = actif, gris = pas actif.
+                    Switch(
+                        checked = checked,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Encre,
+                            checkedTrackColor = EtatFait,
+                            uncheckedThumbColor = Encre2,
+                            uncheckedTrackColor = EtatVide,
+                            uncheckedBorderColor = EtatVide,
+                        ),
+                        onCheckedChange = {
+                            checked = it
+                            if (it) mainViewModel.enableAutoEval()
+                            else mainViewModel.disableAutoEval()
+                            mainViewModel.reset()
+                        }
+                    )
                 }
-            )
-        }
+            }
 
-        // Fin de competition : s'assurer que rien ne traine avant d'eteindre
-        // les telephones. Le bouton ne contourne pas le retrait exponentiel --
-        // appuyer en boucle sur un serveur eteint ne sert a rien.
-        Spacer(modifier = Modifier.height(24.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+            Spacer(Modifier.height(16.dp))
+
+            // Fin de compétition : s'assurer que rien ne traîne avant d'éteindre
+            // les téléphones. Le bouton ne contourne pas le retrait exponentiel
+            // — appuyer en boucle sur un serveur éteint ne sert à rien.
+            Section(stringResource(R.string.reglages_file)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = if (enAttente > 0)
+                            stringResource(R.string.en_attente, enAttente)
+                        else stringResource(R.string.file_vide),
+                        fontSize = 16.sp,
+                        color = if (enAttente > 0) Attention else Encre2,
+                        fontWeight = if (enAttente > 0) FontWeight.SemiBold
+                                     else FontWeight.Normal,
+                    )
+                    Button(onClick = onToutEnvoyer, enabled = enAttente > 0) {
+                        Text(stringResource(R.string.tout_envoyer))
+                    }
+                }
+
+                // Les refusées. Presque toujours « ce dossard n'existe pas
+                // ENCORE » : l'organisateur ajoute le participant, le juge
+                // appuie ici, et la réussite repart. Sans ce bouton, elle serait
+                // perdue.
+                if (refusees > 0) {
+                    Spacer(Modifier.height(14.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = pluralStringResource(R.plurals.refusees_n, refusees, refusees),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Alerte,
+                        )
+                        Button(onClick = onRenvoyerRefusees) {
+                            Text(stringResource(R.string.renvoyer_refusees))
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.reglages_refus_detail),
+                        fontSize = 13.sp,
+                        color = Encre2,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // À quel serveur ce téléphone parle. Sur place, quand un juge dit
+            // « ça ne marche pas », c'est la première question qu'on lui pose —
+            // et il fallait jusqu'ici démonter l'APK pour y répondre.
+            Section(stringResource(R.string.reglages_serveur)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val (pastille, texte) = when (serveurJoignable) {
+                        true -> EtatFait to stringResource(R.string.serveur_ok)
+                        false -> Alerte to stringResource(R.string.serveur_ko)
+                        null -> Encre2 to stringResource(R.string.serveur_inconnu)
+                    }
+                    Box(Modifier.size(9.dp).background(pastille, CircleShape))
+                    Spacer(Modifier.width(8.dp))
+                    Text(texte, fontSize = 16.sp, color = Encre)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = BuildConfig.SERVER_URL,
+                    fontSize = 13.sp,
+                    color = Encre2,
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
             Text(
-                text = if (enAttente > 0)
-                    stringResource(R.string.en_attente, enAttente)
-                else stringResource(R.string.file_vide),
-                fontSize = 16.sp,
+                text = stringResource(R.string.version, versionName ?: "?"),
+                color = Encre2,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
-            Button(onClick = onToutEnvoyer, enabled = enAttente > 0) {
-                Text(stringResource(R.string.tout_envoyer))
-            }
+            Spacer(Modifier.height(24.dp))
         }
+    }
+}
 
-        // Les refusees. Presque toujours « ce dossard n'existe pas ENCORE » :
-        // l'organisateur ajoute le participant, le juge appuie ici, et la
-        // reussite repart. Sans ce bouton, elle serait perdue.
-        if (refusees > 0) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = stringResource(R.string.refusees, refusees), fontSize = 16.sp)
-                Button(onClick = onRenvoyerRefusees) {
-                    Text(stringResource(R.string.renvoyer_refusees))
-                }
-            }
-        }
+/** Un bloc de réglages : un intitulé discret, puis une carte. */
+@Composable
+private fun Section(titre: String, contenu: @Composable ColumnScope.() -> Unit) {
+    Text(
+        text = titre.uppercase(),
+        fontSize = 12.sp,
+        letterSpacing = 1.2.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = Encre2,
+        modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+    )
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = Carte,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp), content = contenu)
     }
 }
