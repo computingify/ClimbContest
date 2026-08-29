@@ -5,10 +5,18 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -82,6 +90,7 @@ import com.adn.dev.climbcontest.ui.theme.EtatVide
 import com.adn.dev.climbcontest.ui.theme.Trait
 import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 
 // L'adresse du serveur n'est plus une constante ici : elle vient de
 // BuildConfig.SERVER_URL, choisie par le type de build et surchargeable
@@ -115,16 +124,55 @@ class MainActivity : ComponentActivity() {
         )
 
 
+        // ⚠️ Ces trois initialisations vivaient dans `AppContent()`, qui est un
+        // @Composable : elles repartaient donc a CHAQUE recomposition. Ouvrir
+        // puis fermer les reglages construisait un nouveau `Server` et lancait
+        // une nouvelle boucle de fond -- l'ancienne, accrochee au
+        // `lifecycleScope` et non a la composition, continuant de tourner. Les
+        // boucles s'empilaient, et avec elles les envois et les
+        // rafraichissements de catalogue.
+        val options = GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .enableAutoZoom()
+            .build()
+        scanner = GmsBarcodeScanning.getClient(this, options)
+        installerLesModulesDuScanner()
+
+        server = Server(mainViewModel, this)
+
+        // Envoi par lots et rafraichissement du catalogue. Cette boucle-la vit
+        // tant que l'ecran existe, arriere-plan compris : ce qui est dans la
+        // file doit partir, que le juge regarde ou non.
+        server.demarrerBoucleDeFond(lifecycleScope)
+
+        // Le voyant de connexion, lui, ne vit qu'au premier plan -- le principe
+        // de sowel. `repeatOnLifecycle` annule le suivi quand on quitte l'ecran
+        // et le relance quand on y revient, ce qui donne exactement la sequence
+        // voulue : hors ligne en arriere-plan, « je verifie » au retour, puis la
+        // verite apres un aller-retour.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                server.suivreLaPresence()
+            }
+        }
+
         setContent {
             ClimbContestTheme {
                 AppContent()
             }
         }
-
     }
 
-    override fun onPause() {
-        super.onPause()
+    /** Le module ML Kit du scanner n'est pas toujours present sur l'appareil. */
+    private fun installerLesModulesDuScanner() {
+        val client = ModuleInstall.getClient(this)
+        client.areModulesAvailable(scanner).addOnSuccessListener {
+            if (!it.areModulesAvailable()) {
+                client.installModules(
+                    ModuleInstallRequest.newBuilder().addApi(scanner).build()
+                )
+            }
+        }
     }
 
     @Composable
@@ -153,44 +201,6 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        // Set the barcode format to detect only QR Code, and enable the automatic zoom
-        val options = GmsBarcodeScannerOptions.Builder()
-            .setBarcodeFormats(
-                Barcode.FORMAT_QR_CODE)
-            .enableAutoZoom() // available on 16.1.0 and higher
-            .build()
-
-        // Create scanner instance
-        scanner = GmsBarcodeScanning.getClient(this, options)
-        val moduleInstallClient = ModuleInstall.getClient(this)
-        moduleInstallClient
-            .areModulesAvailable(scanner)
-            .addOnSuccessListener {
-                if (it.areModulesAvailable()) {
-                    // Modules are present on the device...
-                } else {
-                    // Modules are not present on the device...
-                    val moduleInstallRequest =
-                        ModuleInstallRequest.newBuilder()
-                            .addApi(scanner)
-                            .build()
-                    moduleInstallClient
-                        .installModules(moduleInstallRequest)
-//                        .addOnSuccessListener {
-//                        }
-//                        .addOnFailureListener {
-//                            // Handle failure…
-//                        }
-                }
-            }
-            .addOnFailureListener {
-                // Handle failure...
-            }
-        // Initialize the server communication object
-        server = Server(mainViewModel, this)
-        // Envoi par lots et rafraichissement du catalogue, en arriere-plan.
-        // Lie au cycle de vie : la boucle s'arrete avec l'ecran.
-        server.demarrerBoucleDeFond(lifecycleScope)
     }
 
     private fun startScanning(scanType: String) {
@@ -511,45 +521,74 @@ private fun Barre(
             titleContentColor = Encre,
         ),
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Le logo d'origine est un PNG 1414x1000 a fond blanc opaque,
-                // avec beaucoup de marge autour du dessin. Pose dans une boite
-                // carree, il se retrouvait en boite aux lettres : une bande
-                // blanche ou la chevre etait minuscule. `logo_rond` est le meme
-                // dessin recadre au carre, ce qui permet de le detourer en rond
-                // sans rien couper.
-                Image(
-                    painter = painterResource(id = R.drawable.logo_rond),
-                    contentDescription = stringResource(R.string.app_logo),
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape),
-                )
-                Spacer(Modifier.width(10.dp))
-                // L'etat du serveur, en permanence. Un juge ne l'apprenait
-                // qu'au moment ou quelque chose echouait -- en plein geste.
-                val (pastille, texte) = when (serveurJoignable) {
-                    true -> EtatFait to stringResource(R.string.serveur_ok)
-                    false -> Alerte to stringResource(R.string.serveur_ko)
-                    null -> Encre2 to stringResource(R.string.serveur_inconnu)
-                }
-                Box(
-                    modifier = Modifier
-                        .size(9.dp)
-                        .background(pastille, CircleShape)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(texte, fontSize = 13.sp, color = Encre2,
-                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            // Le logo d'origine est un PNG 1414x1000 a fond blanc opaque, avec
+            // beaucoup de marge autour du dessin. Pose dans une boite carree,
+            // il se retrouvait en boite aux lettres : une bande blanche ou la
+            // chevre etait minuscule. `logo_rond` est le meme dessin recadre au
+            // carre, ce qui permet de le detourer en rond sans rien couper.
+            Image(
+                painter = painterResource(id = R.drawable.logo_rond),
+                contentDescription = stringResource(R.string.app_logo),
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape),
+            )
         },
         actions = {
+            VoyantConnexion(serveurJoignable)
             IconButton(onClick = onOpenSettings) {
                 Icon(Icons.Default.Settings,
                      contentDescription = stringResource(R.string.reglages),
                      tint = Encre2)
             }
         },
+    )
+}
+
+/**
+ * Le voyant de connexion, en haut a droite.
+ *
+ * Repris du principe de sowel : une petite icone de connexion sans fil, verte
+ * quand la liaison est la, rouge sinon. Elle occupait auparavant une pastille
+ * et une phrase entiere a gauche de la barre — de la place prise en
+ * permanence pour une information qui, presque toujours, dit « tout va bien ».
+ * La phrase complete reste dans les reglages, avec l'adresse du serveur.
+ *
+ * L'icone est BARREE quand ca ne passe pas. Le vert et le rouge ne suffisent
+ * pas : environ 8 % des hommes distinguent mal ces deux couleurs-la, et il y a
+ * des juges hommes (regle posee dans ui/theme/Color.kt). La forme doit porter
+ * l'information autant que la couleur.
+ *
+ * Pendant la verification, l'icone bat doucement : « je cherche » se distingue
+ * de « c'est casse », ce qu'un simple gris ne disait pas.
+ */
+@Composable
+private fun VoyantConnexion(serveurJoignable: Boolean?) {
+    val (icone, couleur, description) = when (serveurJoignable) {
+        true -> Triple(R.drawable.ic_wifi, EtatFait, R.string.serveur_ok)
+        false -> Triple(R.drawable.ic_wifi_off, Alerte, R.string.serveur_ko)
+        null -> Triple(R.drawable.ic_wifi, Attention, R.string.serveur_inconnu)
+    }
+
+    val battement = rememberInfiniteTransition(label = "verification")
+    val opacite by battement.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(700, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "opacite",
+    )
+
+    Icon(
+        painter = painterResource(id = icone),
+        contentDescription = stringResource(description),
+        tint = couleur,
+        modifier = Modifier
+            .padding(end = 4.dp)
+            .size(22.dp)
+            .alpha(if (serveurJoignable == null) opacite else 1f),
     )
 }
 

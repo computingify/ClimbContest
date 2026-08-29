@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Le voyant de connexion, repris du principe de sowel : une petite icone de
+  connexion sans fil en haut a droite, verte quand ca passe.
+
+  Dessine au trait plutot qu'en chemins pleins : trois arcs et un point, qu'on
+  peut relire et corriger. Les courbes sont quadratiques (Q) et non des arcs de
+  cercle (A) — le sens de courbure d'un Q se lit directement dans le point de
+  controle, la ou un A depend de deux drapeaux faciles a inverser.
+
+  La couleur vient de l'appelant : `Icon(..., tint = ...)` repeint tout,
+  remplissage comme trait.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:pathData="M3.2,11 Q12,2.6 20.8,11"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.1"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M6.9,14.6 Q12,9 17.1,14.6"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.1"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M10.1,17.9 Q12,15.6 13.9,17.9"
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.1"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M12,19.4 m-1.6,0 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0"
+        android:fillColor="#FFFFFFFF" />
+</vector>

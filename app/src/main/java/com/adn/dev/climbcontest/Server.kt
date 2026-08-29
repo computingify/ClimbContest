@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.Toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -62,7 +63,6 @@ class Server(
                 delay(1_000)
                 envoyerSiNecessaire()
                 rafraichirSiNecessaire()
-                verifierPresenceSiNecessaire()
             }
         }
     }
@@ -203,30 +203,63 @@ class Server(
     }
 
     /**
-     * Tient le voyant « serveur joignable » a jour quand rien d'autre ne parle.
+     * Le voyant de connexion, **tant que l'ecran est au premier plan**.
      *
-     * Il ne se mettait a jour qu'a l'occasion d'un echange utile : un envoi --
-     * il n'y en a que si le juge scanne -- ou le rafraichissement du catalogue,
-     * toutes les CINQ minutes. Un telephone pose sur une table pendant que le
-     * point d'acces tombe affichait donc « Serveur joignable » pendant cinq
-     * minutes, alors qu'il ne l'etait plus. C'est exactement le moment ou le
-     * voyant devait servir.
+     * Le principe est celui de sowel : une petite icone de connexion sans fil,
+     * verte quand la liaison est la, rouge sinon ; elle passe tranquillement en
+     * hors ligne quand l'application n'est plus au premier plan, et un controle
+     * est refait des qu'on y revient.
      *
-     * Le cout est negligeable : une requete de ~200 octets toutes les
-     * [PERIODE_PRESENCE_MS] et par telephone, soit moins d'une requete par
+     * Pourquoi ne pas simplement sonder en permanence : en arriere-plan,
+     * personne ne regarde le voyant. Continuer a interroger le serveur toutes
+     * les trente secondes couterait de la batterie et du reseau pour une
+     * information que nul ne lit -- et Android finirait de toute facon par
+     * geler la boucle, ce qui donnerait un voyant fige au lieu d'un voyant
+     * honnete.
+     *
+     * Ce qu'il ne faut surtout pas, c'est afficher a la reprise l'etat d'avant
+     * la mise en veille. D'ou la sequence : « je verifie » d'abord, un
+     * aller-retour immediat ensuite, et le rythme de croisiere apres.
+     *
+     * Le cout en croisiere est negligeable : une requete de ~200 octets toutes
+     * les [PERIODE_PRESENCE_MS] et par telephone, soit moins d'une requete par
      * seconde pour les vingt-cinq telephones d'une competition -- a comparer
      * aux soixante telephones de spectateurs qui rafraichissent le classement
-     * toutes les quinze secondes.
+     * toutes les quinze secondes. Et elle est sautee des qu'autre chose vient
+     * de parler : un juge qui scanne en continu ne genere rien de plus.
      *
-     * Elle est evitee des qu'autre chose vient de parler : un juge qui scanne
-     * en continu ne genere aucune requete supplementaire.
+     * A appeler sous `repeatOnLifecycle(RESUMED)` : la fonction ne rend la main
+     * que lorsqu'on l'annule.
      */
-    private fun verifierPresenceSiNecessaire() {
-        val maintenant = System.currentTimeMillis()
+    suspend fun suivreLaPresence() {
+        try {
+            mainViewModel.setServeurEnVerification()
+            verifierPresence()
+            while (currentCoroutineContext().isActive) {
+                delay(1_000)
+                verifierPresenceSiNecessaire()
+            }
+        } finally {
+            // On quitte le premier plan. Plus personne ne verifie, donc plus
+            // rien a affirmer : hors ligne, sans bruit.
+            mainViewModel.setServeurJoignable(false)
+        }
+    }
+
+    private suspend fun verifierPresenceSiNecessaire() {
         val dernier = maxOf(dernierContactMs, dernierEnvoiMs, dernierRafraichissementMs)
-        if (maintenant - dernier < PERIODE_PRESENCE_MS) return
-        dernierContactMs = maintenant
-        mainViewModel.setServeurJoignable(api.estJoignable())
+        if (System.currentTimeMillis() - dernier < PERIODE_PRESENCE_MS) return
+        verifierPresence()
+    }
+
+    /**
+     * `suivreLaPresence` tourne sous `repeatOnLifecycle`, donc sur le fil
+     * principal : l'appel reseau doit explicitement partir ailleurs.
+     */
+    private suspend fun verifierPresence() {
+        dernierContactMs = System.currentTimeMillis()
+        val joignable = withContext(Dispatchers.IO) { api.estJoignable() }
+        mainViewModel.setServeurJoignable(joignable)
     }
 
     private fun envoyerSiNecessaire(): BilanEnvoi? = envoyer(forcer = false)
