@@ -246,12 +246,13 @@ class Server(
      * la mise en veille. D'ou la sequence : « je verifie » d'abord, un
      * aller-retour immediat ensuite, et le rythme de croisiere apres.
      *
-     * Le cout en croisiere est negligeable : une requete de ~200 octets toutes
-     * les [PERIODE_PRESENCE_MS] et par telephone, soit moins d'une requete par
-     * seconde pour les vingt-cinq telephones d'une competition -- a comparer
-     * aux soixante telephones de spectateurs qui rafraichissent le classement
-     * toutes les quinze secondes. Et elle est sautee des qu'autre chose vient
-     * de parler : un juge qui scanne en continu ne genere rien de plus.
+     * Le cout en croisiere est negligeable : le sondage est un `304` du
+     * catalogue, ~150 octets, toutes les [PERIODE_PRESENCE_MS] et par
+     * telephone -- moins d'une requete par seconde pour les vingt-cinq
+     * telephones d'une competition, a comparer aux soixante telephones de
+     * spectateurs qui rafraichissent le classement toutes les quinze secondes.
+     * Et il est saute des qu'autre chose vient de parler : un juge qui scanne
+     * en continu ne genere rien de plus.
      *
      * A appeler sous `repeatOnLifecycle(RESUMED)` : la fonction ne rend la main
      * que lorsqu'on l'annule.
@@ -278,13 +279,33 @@ class Server(
     }
 
     /**
+     * Le sondage lui-meme : un rafraichissement du catalogue.
+     *
+     * ⚠️ Il tapait `/health`, et c'etait FAUX sur le terrain. Caddy ferme
+     * `/health` a tout ce qui n'est pas le LAN de la maison (spec 001) : le
+     * jour de la competition, les telephones des juges sont sur le wifi de la
+     * salle, donc du cote Internet. Ils auraient recu `404` a chaque sondage et
+     * affiche « Serveur injoignable » en permanence, pendant que tout
+     * fonctionnait. Un voyant qui ment est pire que pas de voyant, et
+     * celui-la aurait menti tout le temps.
+     *
+     * Le catalogue, lui, est une route que les juges atteignent forcement --
+     * sans quoi l'application ne marcherait pas du tout. Avec `If-None-Match`,
+     * c'est un `304` a ~150 octets, et le sondage devient exactement la bonne
+     * question : « puis-je encore parler utilement au serveur ? ». Depuis la
+     * spec 012, il valide aussi la cle d'API de bout en bout.
+     *
+     * Effet de bord assume, et bienvenu : le catalogue est desormais rafraichi
+     * toutes les trente secondes au premier plan, au lieu des cinq minutes du
+     * filet de [DepotCatalogue]. Un participant inscrit dix minutes avant son
+     * passage arrive donc dans le telephone du juge en trente secondes.
+     *
      * `suivreLaPresence` tourne sous `repeatOnLifecycle`, donc sur le fil
      * principal : l'appel reseau doit explicitement partir ailleurs.
      */
     private suspend fun verifierPresence() {
         dernierContactMs = System.currentTimeMillis()
-        val joignable = withContext(Dispatchers.IO) { api.estJoignable() }
-        mainViewModel.setServeurJoignable(joignable)
+        withContext(Dispatchers.IO) { rafraichirCatalogue() }
     }
 
     private fun envoyerSiNecessaire(): BilanEnvoi? = envoyer(forcer = false)
@@ -338,9 +359,14 @@ class Server(
                 versionServeurConnue = version
                 mainViewModel.setServeurJoignable(true)
             }
+            // Tout echec eteint le voyant, reseau ou non. Un `401` sur une cle
+            // refusee veut dire que rien ne passera : du point de vue du juge,
+            // c'est la meme chose qu'un serveur absent, et lui afficher « tout
+            // va bien » serait un mensonge. La distinction reste au journal,
+            // pour celui qui diagnostique.
             is ResultatCatalogue.Echec -> {
-                println("ClimbContest: ${r.message}")
-                if (r.reseau) mainViewModel.setServeurJoignable(false)
+                println("ClimbContest: ${r.message} (reseau=${r.reseau})")
+                mainViewModel.setServeurJoignable(false)
             }
         }
     }
