@@ -36,6 +36,20 @@ class MainViewModel : ViewModel() {
         _enAttente.value = n
     }
 
+    /**
+     * Les réussites que le serveur a refusées, et qui attendent une décision.
+     *
+     * Presque toujours « ce dossard n'existe pas **encore** » : le participant
+     * s'est inscrit à 9 h et l'organisateur ne l'a pas encore ajouté. Elles
+     * étaient jetées ; le grimpeur perdait son bloc sans que personne le voie.
+     */
+    private val _refusees = MutableStateFlow(0)
+    val refusees: StateFlow<Int> = _refusees
+
+    fun setRefusees(n: Int) {
+        _refusees.value = n
+    }
+
     fun setClimberId(id: String?) {
         _climberId.value = id
     }

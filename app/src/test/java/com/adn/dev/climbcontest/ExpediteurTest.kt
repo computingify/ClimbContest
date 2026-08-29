@@ -326,3 +326,178 @@ class ExpediteurTest {
         assertEquals(120 - PolitiqueEnvoi.LOT_MAX, bilan.restantes)
     }
 }
+
+
+/**
+ * Les réussites refusées par le serveur.
+ *
+ * Elles étaient jetées, avec une ligne dans le journal technique que personne
+ * ne lit. Or un refus veut presque toujours dire « ce dossard n'existe pas
+ * **encore** » : le participant s'est inscrit à 9 h et l'organisateur ne l'a
+ * pas encore ajouté. Le grimpeur perdait son bloc, et personne ne le voyait.
+ */
+class RefuseesTest {
+
+    @get:Rule
+    val dossierTemporaire = TemporaryFolder()
+
+    private lateinit var serveur: MockWebServer
+    private lateinit var file: FileDeReussites
+    private lateinit var expediteur: Expediteur
+
+    @Before
+    fun preparer() {
+        serveur = MockWebServer()
+        serveur.start()
+        file = FileDeReussites(dossierTemporaire.newFolder("file"))
+        expediteur = Expediteur(file, ClimbContestApi(
+            baseUrl = serveur.url("/").toString(), client = OkHttpClient()))
+    }
+
+    @After
+    fun arreter() = serveur.close()
+
+    private fun repondre(corps: String) {
+        serveur.enqueue(MockResponse.Builder().code(200).body(corps)
+            .setHeader("Content-Type", "application/json").build())
+    }
+
+    private fun remplir(n: Int) = (1..n).forEach {
+        file.ajouter(ReussiteEnAttente("r$it", "$it", "ZJ$it", "2026-11-15T09:00:0${it}Z"))
+    }
+
+    @Test
+    fun `une refusee n'est plus perdue`() {
+        remplir(1)
+        repondre("""{"success":true,"resultats":[
+            {"ref":"r1","etat":"refusee","message":"Dossard 1 inconnu"}]}""")
+
+        expediteur.tenter()
+
+        assertEquals("elle quitte la file principale", 0, file.nombreEnAttente())
+        assertEquals("mais elle est conservee", 1, file.nombreRefusees())
+    }
+
+    @Test
+    fun `le motif du refus est conserve`() {
+        remplir(1)
+        repondre("""{"success":true,"resultats":[
+            {"ref":"r1","etat":"refusee","message":"Dossard 1 inconnu"}]}""")
+        expediteur.tenter()
+
+        assertEquals("Dossard 1 inconnu", file.refusees().single().motif)
+    }
+
+    @Test
+    fun `le grimpeur et le bloc sont conserves`() {
+        remplir(1)
+        repondre("""{"success":true,"resultats":[
+            {"ref":"r1","etat":"refusee","message":"inconnu"}]}""")
+        expediteur.tenter()
+
+        val r = file.refusees().single()
+        assertEquals("1", r.dossard)
+        assertEquals("ZJ1", r.bloc)
+    }
+
+    @Test
+    fun `elles survivent a un redemarrage de l'application`() {
+        remplir(1)
+        repondre("""{"success":true,"resultats":[
+            {"ref":"r1","etat":"refusee","message":"inconnu"}]}""")
+        expediteur.tenter()
+
+        val apresRedemarrage = FileDeReussites(
+            java.io.File(dossierTemporaire.root, "file"))
+
+        assertEquals(1, apresRedemarrage.nombreRefusees())
+    }
+
+    @Test
+    fun `le bilan annonce combien sont mises de cote`() {
+        remplir(2)
+        repondre("""{"success":true,"resultats":[
+            {"ref":"r1","etat":"enregistree"},
+            {"ref":"r2","etat":"refusee","message":"inconnu"}]}""")
+
+        val bilan = expediteur.tenter()!!
+
+        assertEquals(1, bilan.envoyees)
+        assertEquals(1, bilan.misesDeCote)
+    }
+
+    @Test
+    fun `les renvoyer les remet dans la file`() {
+        // Le geste du juge apres qu'un organisateur a ajoute le participant.
+        remplir(1)
+        repondre("""{"success":true,"resultats":[
+            {"ref":"r1","etat":"refusee","message":"inconnu"}]}""")
+        expediteur.tenter()
+
+        val nombre = expediteur.renvoyerLesRefusees()
+
+        assertEquals(1, nombre)
+        assertEquals(1, file.nombreEnAttente())
+        assertEquals(0, file.nombreRefusees())
+    }
+
+    @Test
+    fun `elles repartent avec une NOUVELLE ref`() {
+        // L'ancienne a deja ete acquittee : la reutiliser les ferait
+        // disparaitre aussitot, sans jamais atteindre le serveur.
+        remplir(1)
+        repondre("""{"success":true,"resultats":[
+            {"ref":"r1","etat":"refusee","message":"inconnu"}]}""")
+        expediteur.tenter()
+
+        expediteur.renvoyerLesRefusees()
+
+        assertTrue("la ref doit avoir change", file.enAttente().single().ref != "r1")
+    }
+
+    @Test
+    fun `et elles atteignent le serveur au second essai`() {
+        remplir(1)
+        repondre("""{"success":true,"resultats":[
+            {"ref":"r1","etat":"refusee","message":"Dossard 1 inconnu"}]}""")
+        expediteur.tenter()
+        expediteur.renvoyerLesRefusees()
+
+        // Le participant a ete ajoute entre-temps : le serveur accepte.
+        val nouvelle = file.enAttente().single().ref
+        repondre("""{"success":true,"resultats":[
+            {"ref":"$nouvelle","etat":"enregistree"}]}""")
+        expediteur.tenter()
+
+        assertEquals(0, file.nombreEnAttente())
+        assertEquals(0, file.nombreRefusees())
+    }
+
+    @Test
+    fun `renvoyer quand il n'y a rien ne fait rien`() {
+        assertEquals(0, expediteur.renvoyerLesRefusees())
+    }
+
+    @Test
+    fun `une panne reseau ne met rien de cote`() {
+        // Ce n'est PAS un refus : la reussite reste dans la file principale.
+        remplir(2)
+        serveur.close()
+
+        expediteur.tenter()
+
+        assertEquals(2, file.nombreEnAttente())
+        assertEquals(0, file.nombreRefusees())
+    }
+
+    @Test
+    fun `un 401 ne met rien de cote non plus`() {
+        remplir(2)
+        serveur.enqueue(MockResponse.Builder().code(401).body("{}").build())
+
+        expediteur.tenter()
+
+        assertEquals(2, file.nombreEnAttente())
+        assertEquals(0, file.nombreRefusees())
+    }
+}
