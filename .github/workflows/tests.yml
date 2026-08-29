@@ -38,7 +38,8 @@ jobs:
       - name: serverUrl reste cantonne au debug
         run: |
           ./gradlew :app:assembleDebug -PserverUrl=http://192.168.0.32:5007 --no-daemon
-          ./gradlew :app:assembleRelease -PserverUrl=http://192.168.0.32:5007 --no-daemon
+          ./gradlew :app:assembleRelease -PserverUrl=http://192.168.0.32:5007 \
+            -PreleaseApiKey=cle-de-ci --no-daemon
           grep -q 'SERVER_URL = "https://' \
             app/build/generated/source/buildConfig/release/com/adn/dev/climbcontest/BuildConfig.java \
             || { echo "ECHEC : serverUrl a contamine le build release"; exit 1; }
@@ -48,13 +49,31 @@ jobs:
       - name: Le garde-fou https tient-il ?
         run: |
           if ./gradlew :app:assembleRelease -PreleaseServerUrl=http://10.0.2.2:5007 \
-               --no-daemon > /tmp/sortie 2>&1; then
+               -PreleaseApiKey=cle-de-ci --no-daemon > /tmp/sortie 2>&1; then
             echo "ECHEC : une adresse http a ete acceptee en release"
             exit 1
           fi
           grep -q "doit etre en HTTPS" /tmp/sortie \
             || { echo "echec, mais pas pour la bonne raison :"; tail -30 /tmp/sortie; exit 1; }
           echo "le garde-fou a bien refuse l'adresse"
+
+      # Spec 012 : un APK release sans cle serait refuse par le serveur, et on
+      # le decouvrirait le jour de la competition. Le garde-fou doit donc tenir
+      # aussi longtemps que le build lui-meme.
+      - name: Le garde-fou de la cle d'API tient-il ?
+        run: |
+          if ./gradlew :app:assembleRelease --no-daemon > /tmp/sortie-cle 2>&1; then
+            echo "ECHEC : un build release sans cle d'API a ete accepte"
+            exit 1
+          fi
+          grep -q "Cle d'API manquante" /tmp/sortie-cle \
+            || { echo "echec, mais pas pour la bonne raison :"; tail -30 /tmp/sortie-cle; exit 1; }
+          echo "le garde-fou a bien refuse le build sans cle"
+
+      # Et il ne doit pas gener les taches de debug : c'est la commande que la
+      # documentation recommande pour tester depuis un telephone du wifi.
+      - name: Le garde-fou ne gene pas le debug
+        run: ./gradlew :app:assembleDebug -PserverUrl=http://192.168.0.32:5007 --no-daemon
 
       - name: Rapports de test
         if: always()
