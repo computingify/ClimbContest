@@ -82,6 +82,27 @@ class ClimbContestApi(
         poster("success", JSONObject().put("bib", dossard).put("bloc", tag))
 
     /**
+     * « Es-tu là ? » — la question la moins chère qu'on puisse poser.
+     *
+     * Le voyant de la barre du haut annonce l'état du serveur. Sans cet appel,
+     * il ne repose que sur le dernier échange **utile** : un envoi (il n'y en a
+     * que si le juge scanne) ou le rafraîchissement du catalogue (toutes les
+     * cinq minutes). Un téléphone posé sur une table pendant que le réseau
+     * tombe affichait donc « Serveur joignable » pendant cinq minutes. Un
+     * voyant qui ment est pire que pas de voyant.
+     *
+     * `/health` répond 503 quand la base est inutilisable : pour le juge, un
+     * serveur qui refusera tout équivaut à un serveur absent, d'où le test sur
+     * 200 et non sur « a répondu ».
+     */
+    fun estJoignable(): Boolean = try {
+        val requete = Request.Builder().url("$baseUrl/health").get().build()
+        client.newCall(requete).execute().use { it.code == 200 }
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
      * Télécharge le catalogue.
      *
      * [versionConnue] est envoyée en `If-None-Match` : si rien n'a bougé, le

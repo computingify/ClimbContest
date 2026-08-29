@@ -7,4 +7,7 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- Doit rester egal a `Fond` dans ui/theme/Color.kt : c'est la meme
+         couleur, une fois pour la fenetre Android, une fois pour Compose. -->
+    <color name="fond">#FF0E1116</color>
 </resources>

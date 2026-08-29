@@ -1,32 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  L'application est utilisée par des bénévoles francophones, en salle, dans le
+  bruit. Les libellés sont donc écrits en français correct et accentué : un
+  « Envoi refuse » sans accent passe pour un bug avant même d'être lu.
+-->
 <resources>
     <string name="climber">Grimpeur</string>
     <string name="block">Bloc</string>
-    <string name="reset">Reset</string>
-    <string name="failed_to_scan">Problème de scan: %1$s</string>
-    <string name="id_accepted">%1$s Identifiant %2$s valide</string>
-    <string name="id_rejected_please_scan_again">%1$s Identifiant %2$s incorrect. Recommencez.</string>
+    <string name="reset">Effacer le scan</string>
+    <string name="failed_to_scan">Problème de scan : %1$s</string>
+    <string name="id_rejected_please_scan_again">%1$s : identifiant %2$s inconnu. Recommencez.</string>
     <string name="climber_and_bloc_successfully_registered">Validé</string>
-    <string name="app_logo">Application logo</string>
-    <string name="server_address">Adresse du serveur</string>
-    <string name="save">Ok</string>
-    <string name="back">Précédent</string>
+    <string name="app_logo">Logo du club</string>
+    <string name="back">Retour</string>
     <string name="send">Envoyer</string>
-    <string name="submit_failed">Erreur de dialogue avec le serveur</string>
-    <string name="json_parsing_error">Le retour du serveur en format incorrecte</string>
+    <string name="submit_failed">Envoi refusé par le serveur</string>
     <string name="network_error">Aucun accès au serveur</string>
-    <string name="version">Version: %1$s</string>
-    <string name="invalid_server_address">Error dans l\'adresse du serveur</string>
-    <string name="auto_evaluate">Mode auto evalutation</string>
-    <string name="scan_reseau">Serveur injoignable. Rescannez, le code est peut-etre bon.</string>
-    <string name="refusees">%1$d refusée(s)</string>
-    <string name="renvoyer_refusees">Renvoyer les refusées</string>
-    <string name="refus_renvoyes">Refusées remises en file</string>
+    <string name="version">Version %1$s</string>
+    <!-- « Mode auto evalutation » : faute de frappe, et surtout un nom qui ne
+         dit rien à un bénévole. Ce que ça fait vraiment : garder le grimpeur
+         après un envoi, pour enchaîner ses blocs. -->
+    <string name="auto_evaluate">Garder le grimpeur entre deux blocs</string>
+    <string name="auto_evaluate_detail">Pratique quand un grimpeur enchaîne plusieurs blocs : seul le bloc est remis à zéro après un envoi.</string>
+    <string name="a_scanner">À scanner</string>
+    <string name="dernieres_validations">Dernières validations</string>
+    <string name="serveur_ok">Serveur joignable</string>
+    <string name="serveur_ko">Serveur injoignable</string>
+    <string name="serveur_inconnu">Connexion en cours</string>
+    <string name="effacer_titre">Effacer le scan en cours ?</string>
+    <string name="effacer_detail">Ce qui est scanné sera perdu. Les réussites déjà envoyées ne sont pas concernées.</string>
+    <string name="effacer_oui">Effacer</string>
+    <string name="effacer_non">Annuler</string>
+    <string name="scan_reseau">Serveur injoignable. Rescannez, le code est peut-être bon.</string>
+    <!-- « 2 refusée(s) » se lit mal sur un ecran qu'on consulte en trois
+         secondes. En francais, 0 et 1 prennent le singulier. -->
+    <plurals name="refusees_n">
+        <item quantity="one">%d refusée</item>
+        <item quantity="other">%d refusées</item>
+    </plurals>
+    <string name="renvoyer_refusees">Renvoyer</string>
+    <string name="refus_renvoyes">Réussites refusées remises en file</string>
     <string name="aucun_refus">Aucune réussite refusée</string>
-    <string name="file_vide">Tout est deja envoye</string>
-    <string name="file_envoyee">Toutes les reussites sont envoyees</string>
-    <string name="file_reste">%1$d reussite(s) encore en attente</string>
+    <string name="file_vide">Tout est déjà envoyé</string>
+    <string name="file_envoyee">Toutes les réussites sont envoyées</string>
+    <string name="file_reste">%1$d réussite(s) encore en attente</string>
     <string name="en_attente">%1$d en attente</string>
-    <string name="tout_envoyer">Tout envoyer maintenant</string>
-    <string name="rien_a_envoyer">Scannez un grimpeur et un bloc avant d\'envoyer</string>
+    <string name="tout_envoyer">Tout envoyer</string>
+    <string name="rien_a_envoyer">Scannez le grimpeur puis le bloc</string>
+    <!-- Écran de réglages. -->
+    <string name="reglages">Réglages</string>
+    <string name="reglages_saisie">Saisie</string>
+    <string name="reglages_file">File d\'attente</string>
+    <string name="reglages_serveur">Serveur</string>
+    <string name="reglages_refus_detail">Une réussite est refusée quand le serveur ne connaît pas encore le dossard. Dès que l\'organisateur a ajouté le participant, renvoyez-la.</string>
 </resources>

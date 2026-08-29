@@ -5,6 +5,14 @@ import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/** Une validation passée, telle que le juge doit pouvoir la relire. */
+data class Validation(
+    val grimpeur: String,
+    val bloc: String,
+    val heure: String,
+)
+
+
 class MainViewModel : ViewModel() {
 
     private val _climberId = MutableStateFlow<String?>(null)
@@ -48,6 +56,38 @@ class MainViewModel : ViewModel() {
 
     fun setRefusees(n: Int) {
         _refusees.value = n
+    }
+
+    /**
+     * Les dernières validations, les plus récentes en tête.
+     *
+     * Le manque le plus criant de la version précédente : un juge n'avait
+     * **aucun moyen** de vérifier ce qu'il venait d'envoyer. Le toast dure deux
+     * secondes, dans une salle bruyante où on regarde le mur — et l'écran se
+     * vide juste après. « Est-ce que j'ai bien envoyé le bloc de Léa ? » n'avait
+     * pas de réponse, sinon aller demander à un organisateur.
+     */
+    private val _historique = MutableStateFlow<List<Validation>>(emptyList())
+    val historique: StateFlow<List<Validation>> = _historique
+
+    fun ajouterAuJournal(validation: Validation) {
+        // Cinq lignes : de quoi répondre « oui, c'est parti », pas de quoi
+        // transformer l'écran du juge en registre.
+        _historique.value = (listOf(validation) + _historique.value).take(5)
+    }
+
+    /**
+     * Le serveur répond-il ?
+     *
+     * `null` tant qu'on n'a rien tenté. Un juge n'apprenait l'existence d'un
+     * problème réseau qu'au moment où quelque chose échouait — donc au pire
+     * moment, en plein geste.
+     */
+    private val _serveurJoignable = MutableStateFlow<Boolean?>(null)
+    val serveurJoignable: StateFlow<Boolean?> = _serveurJoignable
+
+    fun setServeurJoignable(joignable: Boolean) {
+        _serveurJoignable.value = joignable
     }
 
     fun setClimberId(id: String?) {

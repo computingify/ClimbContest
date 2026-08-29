@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Le theme XML ne sert qu'a la fenetre elle-meme : ce qu'Android peint AVANT que
+  Compose ait dessine quoi que ce soit. Il heritait de `Material.Light`, donc la
+  fenetre s'ouvrait en BLANC puis basculait en sombre — un flash blanc a chaque
+  lancement, dans une salle mal eclairee. Le theme de l'interface, lui, est dans
+  ui/theme/Theme.kt.
+-->
 <resources>
-
-    <style name="Theme.ClimbContest" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.ClimbContest" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fond</item>
+    </style>
 </resources>

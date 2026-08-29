@@ -6,10 +6,13 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +56,32 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import com.adn.dev.climbcontest.ui.theme.Alerte
+import com.adn.dev.climbcontest.ui.theme.Attention
+import com.adn.dev.climbcontest.ui.theme.Carte
+import com.adn.dev.climbcontest.ui.theme.Carte2
+import com.adn.dev.climbcontest.ui.theme.Encre
+import com.adn.dev.climbcontest.ui.theme.Encre2
+import com.adn.dev.climbcontest.ui.theme.EtatFait
+import com.adn.dev.climbcontest.ui.theme.EtatVide
+import com.adn.dev.climbcontest.ui.theme.Trait
+import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.draw.clip
 
 // L'adresse du serveur n'est plus une constante ici : elle vient de
 // BuildConfig.SERVER_URL, choisie par le type de build et surchargeable
@@ -74,7 +104,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // L'ecran est TOUJOURS sombre (voir ui/theme/Theme.kt). Sans ce
+        // reglage, `enableEdgeToEdge()` suit le mode clair/sombre du systeme et
+        // pose des icones de barre d'etat SOMBRES sur notre barre sombre :
+        // l'heure et la batterie devenaient illisibles sur un telephone regle
+        // en clair -- c'est-a-dire sur la plupart de ceux des benevoles.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
+
 
         setContent {
             ClimbContestTheme {
@@ -101,25 +140,17 @@ class MainActivity : ComponentActivity() {
                 onRenvoyerRefusees = { server.renvoyerLesRefusees(lifecycleScope) },
             )
         } else {
-            Box(
-                modifier = Modifier.fillMaxSize() // Make the box take the full screen size
-            ) {
-                // Background Image
-                Image(
-                    painter = painterResource(id = R.drawable.background_image), // Replace with your image name
-                    contentDescription = "Background Image",
-                    contentScale = ContentScale.Crop, // Adjust how the image is scaled
-                    modifier = Modifier.fillMaxSize() // Make the image cover the full screen
-                )
-                MainScreen(
-                    viewModel = mainViewModel,
-                    onScanClimber = { startScanning("climber") },
-                    onScanBloc = { startScanning("bloc") },
-                    onSubmit = { server.submit() },
-                    onReset = { mainViewModel.reset() },
-                    onOpenSettings = { isSettingsScreen = true }
-                )
-            }
+            // Plus de photo de fond : du texte pose sur une photo donne un
+            // contraste imprevisible, different sur chaque telephone. Ici, la
+            // couleur porte de l'information -- elle doit etre fiable.
+            MainScreen(
+                viewModel = mainViewModel,
+                onScanClimber = { startScanning("climber") },
+                onScanBloc = { startScanning("bloc") },
+                onSubmit = { server.submit() },
+                onReset = { mainViewModel.reset() },
+                onOpenSettings = { isSettingsScreen = true }
+            )
         }
 
         // Set the barcode format to detect only QR Code, and enable the automatic zoom
@@ -192,31 +223,30 @@ class MainActivity : ComponentActivity() {
                         "bloc" -> mainViewModel.setBlocId(localScannedValue)
                     }
                 }
+                // `scanType` vaut « climber » ou « bloc » : des identifiants
+                // internes, en anglais, qui partaient tels quels dans le toast
+                // du juge (« climber Identifiant 42 valide »).
+                val quoi = getString(
+                    if (scanType == "climber") R.string.climber else R.string.block
+                )
                 val texte = when (verdict) {
-                    MessageScan.ACCEPTE ->
-                        getString(R.string.id_accepted, scanType, localScannedValue)
+                    // Rien. La carte passe au vert et affiche le nom : c'est une
+                    // confirmation qui RESTE, la ou le toast recouvrait
+                    // « Envoyer » deux secondes -- exactement ou le pouce va.
+                    MessageScan.ACCEPTE -> null
                     MessageScan.REFUSE ->
                         getString(R.string.id_rejected_please_scan_again,
-                                  scanType, localScannedValue)
+                                  quoi, localScannedValue)
                     // « Identifiant incorrect, recommencez » sur une simple
                     // coupure reseau envoyait le juge chercher un organisateur
                     // pour un QR parfaitement valide.
                     MessageScan.ERREUR_RESEAU -> getString(R.string.scan_reseau)
                 }
-                Toast.makeText(this@MainActivity, texte, Toast.LENGTH_SHORT).show()
+                texte?.let {
+                    Toast.makeText(this@MainActivity, it, Toast.LENGTH_SHORT).show()
+                }
             }
         }
-    }
-
-    private fun isValidServerAddress(address: String): Boolean {
-        val ipRegex = Regex(
-            """\b((25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})(\.(?!$)|$)){4}\b"""
-        )
-        val urlRegex = Regex(
-            """\b(^(([a-zA-Z0-9](-?[a-zA-Z0-9])*)\.)+[a-zA-Z]{2,}(:\d+)?(/.*)?${'$'})?\b"""
-        )
-
-        return ipRegex.matches(address) || urlRegex.matches(address)
     }
 }
 
@@ -229,154 +259,340 @@ fun MainScreen(viewModel: MainViewModel,
                onReset: () -> Unit,
                onOpenSettings: () -> Unit) {
 
-    val spacerSize = 45
-    val buttonSize = 80
-    val buttonTextSize = 42
-    val buttonInfoSpaceSize = 8
-    val infoTextSize = 20
-
     val climberId by viewModel.climberId.collectAsState()
     val climberName by viewModel.climberName.collectAsState()
     val blocId by viewModel.blocId.collectAsState()
     val blocName by viewModel.blocName.collectAsState()
-
     val enAttente by viewModel.enAttente.collectAsState()
     val refusees by viewModel.refusees.collectAsState()
+    val historique by viewModel.historique.collectAsState()
+    val serveurJoignable by viewModel.serveurJoignable.collectAsState()
 
-    val climberButtonColor = if (climberId != null) Color.Green else Color.Gray
-    val blocButtonColor = if (blocId != null) Color.Green else Color.Gray
+    val pretAEnvoyer = climberId != null && blocId != null
+    var confirmerReset by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("") },
-            navigationIcon = {
-                Icon(
-                    painter = painterResource(id = R.drawable.annonay_escalade_logo),
-                    contentDescription = stringResource(R.string.app_logo),
-                    tint = Color.Unspecified,
-                    modifier = Modifier
-                        .padding(start = 10.dp)
-                        .size(100.dp)
-                )
-            },
-            actions = {
-                // Ce que le juge doit pouvoir voir : combien de reussites
-                // n'ont pas encore atteint le serveur. Sans cet indicateur, une
-                // file qui ne part jamais -- backend eteint, wifi coupe toute
-                // la matinee -- resterait invisible jusqu'au depouillement.
-                if (enAttente > 0) {
-                    Text(
-                        text = stringResource(R.string.en_attente, enAttente),
-                        fontSize = 16.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                // En rouge : une refusee ne repartira pas toute seule, il faut
-                // que quelqu'un agisse. C'est le seul indicateur de l'ecran qui
-                // demande une action.
-                if (refusees > 0) {
-                    Text(
-                        text = stringResource(R.string.refusees, refusees),
-                        fontSize = 16.sp,
-                        color = Color.Red,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                }
-                IconButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier.padding(end = 10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Open Settings"
-                    )
-                }
-            }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        Barre(
+            serveurJoignable = serveurJoignable,
+            onOpenSettings = onOpenSettings,
         )
+
+        // La file ne s'affiche que quand elle a quelque chose a dire. Elle
+        // etait dans la barre, en pastilles, ou elle recouvrait « Serveur
+        // joignable » des qu'il y avait deux compteurs -- exactement le jour ou
+        // les deux comptent.
+        if (enAttente > 0 || refusees > 0) {
+            BandeFile(enAttente, refusees, onOpenSettings)
+        }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.Start
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
         ) {
-            Button(
+            Spacer(Modifier.height(12.dp))
+
+            // Les deux scans. Le libelle porte ce qui a ete scanne : avant, le
+            // nom s'affichait dans une boite separee sous le bouton, ce qui
+            // faisait deux endroits a regarder pour une seule information.
+            //
+            // `nom ?: id` : le nom peut manquer -- un serveur qui accepte le QR
+            // sans renvoyer de libelle. La carte passait alors au vert tout en
+            // affichant « A scanner », soit deux informations contradictoires.
+            // Le dossard brut n'est pas ideal, mais il est vrai.
+            BoutonScan(
+                titre = stringResource(R.string.climber),
+                valeur = climberName ?: climberId,
+                complement = if (climberName != null)
+                                 climberId?.let { "n\u00b0$it" } else null,
+                fait = climberId != null,
                 onClick = onScanClimber,
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = climberButtonColor),
-                modifier = Modifier
-                    .height(buttonSize.dp) // Set button height
-                    .fillMaxWidth() // Make the button take full width
-            ) {
-                Text(stringResource(R.string.climber), fontSize = buttonTextSize.sp)
-            }
+            )
 
-            if (climberName != null) {
-                Spacer(modifier = Modifier.height(buttonInfoSpaceSize.dp))
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        stringResource(R.string.climber) + ": $climberName",
-                        fontSize = infoTextSize.sp,
-                        modifier = Modifier
-                            .background(Color.LightGray) // Set your background color here
-                            .padding(6.dp)
-                    )
-                }
-            }
+            Spacer(Modifier.height(14.dp))
 
-            Spacer(modifier = Modifier.height(spacerSize.dp))
-
-            Button(
+            BoutonScan(
+                titre = stringResource(R.string.block),
+                valeur = blocName ?: blocId,
+                complement = null,
+                fait = blocId != null,
                 onClick = onScanBloc,
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = blocButtonColor),
-                modifier = Modifier
-                    .height(buttonSize.dp) // Set button height
-                    .fillMaxWidth() // Make the button take full width
-            ) {
-                Text(stringResource(R.string.block), fontSize = buttonTextSize.sp)
-            }
+            )
 
-            if (blocName != null) {
-                Spacer(modifier = Modifier.height(buttonInfoSpaceSize.dp))
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        stringResource(R.string.block) + ": $blocName",
-                        fontSize = infoTextSize.sp,
-                        modifier = Modifier
-                            .background(Color.LightGray) // Set your background color here
-                            .padding(6.dp)
-                    )
-                }
-            }
+            Spacer(Modifier.height(24.dp))
 
-            Spacer(modifier = Modifier.height((spacerSize).dp))
-
+            // « Envoyer » domine : c'est l'action terminale. Avant, les trois
+            // boutons avaient exactement le meme poids.
             Button(
                 onClick = onSubmit,
+                enabled = pretAEnvoyer,
+                shape = RoundedCornerShape(14.dp),
+                // Desactive, il etait rempli d'`EtatVide` -- exactement la
+                // couleur d'une carte de scan non faite. L'ecran montrait donc
+                // trois cartes grises identiques, et rien ne disait laquelle
+                // etait l'action. Vide et cercle d'un trait, il se lit comme un
+                // emplacement qui attend d'etre rempli.
+                border = if (pretAEnvoyer) null else BorderStroke(1.dp, Trait),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = Color.Transparent,
+                    disabledContentColor = Encre2,
+                ),
                 modifier = Modifier
-                    .height(buttonSize.dp) // Set button height
-                    .fillMaxWidth() // Make the button take full width
+                    .fillMaxWidth()
+                    .height(96.dp),
             ) {
-                Text(stringResource(R.string.send), fontSize = buttonTextSize.sp)
+                Text(
+                    stringResource(R.string.send),
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
 
-            Spacer(modifier = Modifier.height((spacerSize*3).dp))
+            if (!pretAEnvoyer) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.rien_a_envoyer),
+                    fontSize = 14.sp,
+                    color = Encre2,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                )
+            }
 
-            Button(
-                onClick = onReset,
-                modifier = Modifier
-                    .height(60.dp) // Set button height
-                    .fillMaxWidth(0.5f) // Make the button take full width
+            Spacer(Modifier.height(20.dp))
+
+            // « Effacer » s'efface. Avant, il faisait la meme taille
+            // qu'« Envoyer » et se trouvait juste dessous : un pouce qui glisse
+            // perdait le scan.
+            TextButton(
+                onClick = { if (pretAEnvoyer || climberId != null || blocId != null)
+                                confirmerReset = true else onReset() },
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
-                Text(stringResource(R.string.reset), fontSize = buttonTextSize.sp)
+                Text(stringResource(R.string.reset), fontSize = 16.sp, color = Encre2)
+            }
+
+            if (historique.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Journal(historique)
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+
+    if (confirmerReset) {
+        AlertDialog(
+            onDismissRequest = { confirmerReset = false },
+            title = { Text(stringResource(R.string.effacer_titre)) },
+            text = { Text(stringResource(R.string.effacer_detail)) },
+            confirmButton = {
+                TextButton(onClick = { confirmerReset = false; onReset() }) {
+                    Text(stringResource(R.string.effacer_oui), color = Alerte)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmerReset = false }) {
+                    Text(stringResource(R.string.effacer_non))
+                }
+            },
+            containerColor = Carte,
+        )
+    }
+}
+
+/**
+ * Un bouton de scan qui porte ce qu'il a scanné.
+ *
+ * Avant, le nom du grimpeur s'affichait dans une boîte séparée sous le bouton :
+ * deux endroits à regarder pour une seule information, et le bouton restait
+ * identique qu'on ait scanné ou non — seule sa couleur changeait.
+ */
+@Composable
+private fun BoutonScan(
+    titre: String,
+    valeur: String?,
+    complement: String?,
+    fait: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (fait) EtatFait else EtatVide,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 96.dp),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+            Text(
+                text = titre.uppercase(),
+                fontSize = 13.sp,
+                letterSpacing = 1.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (fait) Encre.copy(alpha = 0.75f) else Encre2,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = valeur ?: stringResource(R.string.a_scanner),
+                fontSize = if (valeur != null) 28.sp else 24.sp,
+                fontWeight = if (valeur != null) FontWeight.Bold else FontWeight.Normal,
+                color = if (valeur != null) Encre else Encre2,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (complement != null) {
+                Text(
+                    text = complement,
+                    fontSize = 15.sp,
+                    color = Encre.copy(alpha = 0.7f),
+                )
             }
         }
     }
+}
+
+/** Les dernières validations. La réponse à « est-ce que j'ai bien envoyé ? ». */
+@Composable
+private fun Journal(validations: List<Validation>) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.dernieres_validations).uppercase(),
+            fontSize = 12.sp,
+            letterSpacing = 1.2.sp,
+            color = Encre2,
+        )
+        Spacer(Modifier.height(6.dp))
+        validations.forEach { v ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(v.heure, fontSize = 13.sp, color = Encre2,
+                     modifier = Modifier.padding(end = 10.dp))
+                Text(v.grimpeur, fontSize = 15.sp, color = Encre,
+                     maxLines = 1, overflow = TextOverflow.Ellipsis,
+                     modifier = Modifier.weight(1f))
+                Text(v.bloc, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                     color = EtatFait)
+            }
+        }
+    }
+}
+
+/**
+ * La barre du haut : l'identite du club, et l'etat du serveur.
+ *
+ * Le logo occupait 100 dp — un quart de la hauteur utile sur un petit
+ * telephone, pour une information que le juge connait deja.
+ *
+ * Elle a porte un temps les compteurs de la file, en pastilles poussees dans le
+ * slot `actions`. Ce slot ne comprime pas le titre : des qu'il y avait deux
+ * compteurs, les pastilles passaient PAR-DESSUS « Serveur joignable ». Ils sont
+ * maintenant dans [BandeFile], juste dessous, ou ils ont la place de se lire.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun Barre(
+    serveurJoignable: Boolean?,
+    onOpenSettings: () -> Unit,
+) {
+    TopAppBar(
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Carte,
+            titleContentColor = Encre,
+        ),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Le logo d'origine est un PNG 1414x1000 a fond blanc opaque,
+                // avec beaucoup de marge autour du dessin. Pose dans une boite
+                // carree, il se retrouvait en boite aux lettres : une bande
+                // blanche ou la chevre etait minuscule. `logo_rond` est le meme
+                // dessin recadre au carre, ce qui permet de le detourer en rond
+                // sans rien couper.
+                Image(
+                    painter = painterResource(id = R.drawable.logo_rond),
+                    contentDescription = stringResource(R.string.app_logo),
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape),
+                )
+                Spacer(Modifier.width(10.dp))
+                // L'etat du serveur, en permanence. Un juge ne l'apprenait
+                // qu'au moment ou quelque chose echouait -- en plein geste.
+                val (pastille, texte) = when (serveurJoignable) {
+                    true -> EtatFait to stringResource(R.string.serveur_ok)
+                    false -> Alerte to stringResource(R.string.serveur_ko)
+                    null -> Encre2 to stringResource(R.string.serveur_inconnu)
+                }
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .background(pastille, CircleShape)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(texte, fontSize = 13.sp, color = Encre2,
+                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
+        actions = {
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Default.Settings,
+                     contentDescription = stringResource(R.string.reglages),
+                     tint = Encre2)
+            }
+        },
+    )
+}
+
+/**
+ * Ce qui n'est pas encore parti, quand il y a quelque chose.
+ *
+ * Toute la bande ouvre les reglages : c'est la que vivent « Tout envoyer » et
+ * « Renvoyer », les deux gestes qui la font disparaitre.
+ */
+@Composable
+private fun BandeFile(enAttente: Int, refusees: Int, onOpenSettings: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Carte2)
+            .clickable(onClick = onOpenSettings)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (enAttente > 0) {
+            Pastille(stringResource(R.string.en_attente, enAttente), Attention)
+        }
+        // Le rouge est reserve a ce qui demande une ACTION : une refusee ne
+        // repartira pas toute seule, contrairement a une reussite en file.
+        if (refusees > 0) {
+            Pastille(
+                pluralStringResource(R.plurals.refusees_n, refusees, refusees),
+                Alerte,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Pastille(texte: String, couleur: Color) {
+    Text(
+        text = texte,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = couleur,
+        modifier = Modifier
+            .padding(end = 6.dp)
+            .background(couleur.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+    )
 }
