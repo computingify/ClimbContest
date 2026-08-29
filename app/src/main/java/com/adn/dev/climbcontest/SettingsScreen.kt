@@ -22,9 +22,11 @@ fun SettingsScreen(
     mainViewModel: MainViewModel,
     context: Context, // Pass the context to retrieve version name
     onToutEnvoyer: () -> Unit = {},
+    onRenvoyerRefusees: () -> Unit = {},
 ) {
     var checked by remember { mutableStateOf(mainViewModel.autoEval) }
     val enAttente by mainViewModel.enAttente.collectAsState()
+    val refusees by mainViewModel.refusees.collectAsState()
 
     // Retrieve the app version name from the context
     val versionName = remember {
@@ -97,6 +99,23 @@ fun SettingsScreen(
             )
             Button(onClick = onToutEnvoyer, enabled = enAttente > 0) {
                 Text(stringResource(R.string.tout_envoyer))
+            }
+        }
+
+        // Les refusees. Presque toujours « ce dossard n'existe pas ENCORE » :
+        // l'organisateur ajoute le participant, le juge appuie ici, et la
+        // reussite repart. Sans ce bouton, elle serait perdue.
+        if (refusees > 0) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = stringResource(R.string.refusees, refusees), fontSize = 16.sp)
+                Button(onClick = onRenvoyerRefusees) {
+                    Text(stringResource(R.string.renvoyer_refusees))
+                }
             }
         }
     }

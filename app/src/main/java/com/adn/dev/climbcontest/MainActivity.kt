@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
                 mainViewModel,
                 this,
                 onToutEnvoyer = { server.toutEnvoyerMaintenant(lifecycleScope) },
+                onRenvoyerRefusees = { server.renvoyerLesRefusees(lifecycleScope) },
             )
         } else {
             Box(
@@ -240,6 +241,7 @@ fun MainScreen(viewModel: MainViewModel,
     val blocName by viewModel.blocName.collectAsState()
 
     val enAttente by viewModel.enAttente.collectAsState()
+    val refusees by viewModel.refusees.collectAsState()
 
     val climberButtonColor = if (climberId != null) Color.Green else Color.Gray
     val blocButtonColor = if (blocId != null) Color.Green else Color.Gray
@@ -267,6 +269,17 @@ fun MainScreen(viewModel: MainViewModel,
                         text = stringResource(R.string.en_attente, enAttente),
                         fontSize = 16.sp,
                         color = Color.Gray,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
+                // En rouge : une refusee ne repartira pas toute seule, il faut
+                // que quelqu'un agisse. C'est le seul indicateur de l'ecran qui
+                // demande une action.
+                if (refusees > 0) {
+                    Text(
+                        text = stringResource(R.string.refusees, refusees),
+                        fontSize = 16.sp,
+                        color = Color.Red,
                         modifier = Modifier.padding(end = 8.dp),
                     )
                 }

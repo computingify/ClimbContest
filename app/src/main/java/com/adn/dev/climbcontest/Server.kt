@@ -44,6 +44,7 @@ class Server(
     init {
         depotCatalogue.charger()
         mainViewModel.setEnAttente(file.nombreEnAttente())
+        mainViewModel.setRefusees(file.nombreRefusees())
     }
 
     /**
@@ -153,6 +154,27 @@ class Server(
         }
     }
 
+    /**
+     * Remet les réussites refusées dans la file, et tente de les renvoyer.
+     *
+     * Le geste du juge une fois qu'un organisateur a ajouté le participant
+     * manquant. Sans lui, ces réussites seraient perdues — et c'est le cas le
+     * plus fréquent de refus, pas un cas rare.
+     */
+    fun renvoyerLesRefusees(portee: CoroutineScope) {
+        portee.launch(Dispatchers.IO) {
+            val nombre = expediteur.renvoyerLesRefusees()
+            mainViewModel.setEnAttente(file.nombreEnAttente())
+            mainViewModel.setRefusees(file.nombreRefusees())
+            withContext(Dispatchers.Main) {
+                toast(if (nombre == 0) R.string.aucun_refus else R.string.refus_renvoyes)
+            }
+            envoyer(forcer = true)
+            mainViewModel.setEnAttente(file.nombreEnAttente())
+            mainViewModel.setRefusees(file.nombreRefusees())
+        }
+    }
+
     /** Le bouton « tout envoyer maintenant », pour la fin de compétition. */
     fun toutEnvoyerMaintenant(portee: CoroutineScope) {
         portee.launch(Dispatchers.IO) {
@@ -182,6 +204,7 @@ class Server(
         val bilan = expediteur.tenter()
         bilan?.catalogueVersion?.let { versionServeurConnue = it }
         mainViewModel.setEnAttente(file.nombreEnAttente())
+        mainViewModel.setRefusees(file.nombreRefusees())
         bilan?.refusees?.forEach { println("ClimbContest: refus serveur — ${it.message}") }
         return bilan
     }

@@ -11,12 +11,15 @@ data class ReussiteEnAttente(
     val bloc: String,
     /** Heure du scan, ISO 8601. Indicative : le serveur pose la sienne. */
     val scanneLe: String,
+    /** Renseigné pour une réussite refusée : pourquoi le serveur l'a rejetée. */
+    val motif: String? = null,
 ) {
-    fun versJson(): String = JSONObject()
+    fun versJson(motif: String? = null): String = JSONObject()
         .put("ref", ref)
         .put("bib", dossard)
         .put("bloc", bloc)
         .put("at", scanneLe)
+        .apply { if (motif != null) put("motif", motif) }
         .toString()
 
     companion object {
@@ -27,7 +30,8 @@ data class ReussiteEnAttente(
             val bib = o.optString("bib")
             val bloc = o.optString("bloc")
             if (ref.isBlank() || bib.isBlank() || bloc.isBlank()) null
-            else ReussiteEnAttente(ref, bib, bloc, o.optString("at"))
+            else ReussiteEnAttente(ref, bib, bloc, o.optString("at"),
+                                   o.optString("motif").ifBlank { null })
         } catch (e: Exception) {
             null
         }
@@ -65,10 +69,25 @@ class FileDeReussites(dossier: File) {
 
     private val journal = StockageFichier(File(dossier, FICHIER_FILE))
     private val acquits = StockageFichier(File(dossier, FICHIER_ACQUITS))
+    private val refuses = StockageFichier(File(dossier, FICHIER_REFUSEES))
 
     companion object {
         const val FICHIER_FILE = "file.jsonl"
         const val FICHIER_ACQUITS = "acquittees.txt"
+
+        /**
+         * Les réussites que le serveur a **refusées**.
+         *
+         * Elles étaient simplement jetées, avec une ligne dans le journal
+         * technique que personne ne lit. Or un refus veut presque toujours dire
+         * « ce dossard n'existe pas *encore* » — le participant s'est inscrit à
+         * 9 h et l'organisateur ne l'a pas encore ajouté. Le grimpeur perdait
+         * son bloc, et personne ne le voyait.
+         *
+         * On les garde donc, on les montre au juge, et il peut les renvoyer
+         * d'un geste une fois le participant créé.
+         */
+        const val FICHIER_REFUSEES = "refusees.jsonl"
     }
 
     /**
@@ -114,6 +133,43 @@ class FileDeReussites(dossier: File) {
     }
 
     /**
+     * Met de côté ce que le serveur a refusé, **avant** de l'acquitter.
+     *
+     * L'ordre compte : on écrit d'abord dans le fichier des refus, puis on
+     * acquitte. Une coupure entre les deux laisse la réussite dans la file
+     * principale — elle repartira, et sera refusée à nouveau. C'est sans
+     * gravité. L'ordre inverse la perdrait.
+     */
+    @Synchronized
+    fun mettreDeCote(refuse: ReussiteEnAttente, motif: String) {
+        refuses.ajouter(refuse.versJson(motif))
+    }
+
+    /** Ce que le serveur a refusé, et qui attend une décision humaine. */
+    @Synchronized
+    fun refusees(): List<ReussiteEnAttente> =
+        refuses.lire().mapNotNull { ReussiteEnAttente.depuisJson(it) }
+
+    @Synchronized
+    fun nombreRefusees(): Int = refusees().size
+
+    /**
+     * Remet les refusées dans la file, pour les renvoyer.
+     *
+     * Le geste du juge après qu'un organisateur a ajouté le participant
+     * manquant. Elles repartent avec une **nouvelle** `ref` : l'ancienne a
+     * déjà été acquittée, et la réutiliser les ferait disparaître aussitôt.
+     */
+    @Synchronized
+    fun renvoyerLesRefusees(nouvelleRef: () -> String): Int {
+        val aRenvoyer = refusees()
+        if (aRenvoyer.isEmpty()) return 0
+        aRenvoyer.forEach { journal.ajouter(it.copy(ref = nouvelleRef()).versJson()) }
+        refuses.remplacer(emptyList())
+        return aRenvoyer.size
+    }
+
+    /**
      * Vide les deux fichiers **quand il ne reste rien**.
      *
      * Sans compactage, les fichiers grossiraient toute la journée et la
@@ -133,5 +189,5 @@ class FileDeReussites(dossier: File) {
 
     /** Taille occupée sur le disque, pour le diagnostic. */
     @Synchronized
-    fun octets(): Long = journal.taille() + acquits.taille()
+    fun octets(): Long = journal.taille() + acquits.taille() + refuses.taille()
 }

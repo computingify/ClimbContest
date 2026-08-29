@@ -68,6 +68,8 @@ data class BilanEnvoi(
     val envoyees: Int,
     val refusees: List<RefusServeur>,
     val restantes: Int,
+    /** Total des refusees mises de cote, en attente d'une decision humaine. */
+    val misesDeCote: Int = 0,
     val echec: String? = null,
     val catalogueVersion: Int? = null,
 ) {
@@ -94,6 +96,16 @@ class Expediteur(
     var echecsConsecutifs: Int = 0
         private set
 
+    /**
+     * Remet les refusees dans la file, pour un nouvel essai.
+     *
+     * Le geste du juge apres qu'un organisateur a ajoute le participant
+     * manquant -- le cas de loin le plus frequent : « ce dossard n'existe pas
+     * ENCORE ».
+     */
+    fun renvoyerLesRefusees(): Int =
+        file.renvoyerLesRefusees { java.util.UUID.randomUUID().toString() }
+
     /** Tente un envoi. Renvoie `null` s'il n'y avait rien à envoyer. */
     fun tenter(): BilanEnvoi? {
         val enAttente = file.nombreEnAttente()
@@ -106,16 +118,28 @@ class Expediteur(
             echecsConsecutifs++
             return BilanEnvoi(
                 envoyees = 0, refusees = emptyList(), restantes = file.nombreEnAttente(),
+                misesDeCote = file.nombreRefusees(),
                 echec = resultat.echec, catalogueVersion = resultat.catalogueVersion,
             )
         }
 
         echecsConsecutifs = 0
+
+        // On met de cote AVANT d'acquitter. Une coupure entre les deux laisse
+        // la reussite dans la file principale : elle repartira et sera refusee
+        // a nouveau, ce qui est sans gravite. L'ordre inverse la perdrait.
+        if (resultat.refusees.isNotEmpty()) {
+            val parRef = lot.associateBy { it.ref }
+            resultat.refusees.forEach { refus ->
+                parRef[refus.ref]?.let { file.mettreDeCote(it, refus.message) }
+            }
+        }
         file.acquitter(resultat.acquittees)
         return BilanEnvoi(
             envoyees = resultat.acquittees.size - resultat.refusees.size,
             refusees = resultat.refusees,
             restantes = file.nombreEnAttente(),
+            misesDeCote = file.nombreRefusees(),
             catalogueVersion = resultat.catalogueVersion,
         )
     }
