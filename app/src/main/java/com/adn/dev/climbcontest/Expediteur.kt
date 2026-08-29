@@ -99,6 +99,11 @@ data class BilanEnvoi(
 class Expediteur(
     private val file: FileDeReussites,
     private val api: ClimbContestApi,
+    /**
+     * Qui envoie. Relu a chaque lot : le juge peut renommer son telephone en
+     * pleine competition, et le nom enregistre doit etre celui du moment.
+     */
+    private val identite: () -> IdentiteAppareil? = { null },
 ) {
     var echecsConsecutifs: Int = 0
         private set
@@ -122,7 +127,7 @@ class Expediteur(
         if (enAttente == 0) return null
 
         val lot = file.prochainLot(PolitiqueEnvoi.tailleLot(enAttente))
-        val resultat = api.envoyerLot(lot)
+        val resultat = api.envoyerLot(lot, identite())
 
         if (!resultat.aReussi) {
             echecsConsecutifs++

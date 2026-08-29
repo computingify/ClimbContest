@@ -38,7 +38,7 @@ class Server(
     private val historique = HistoriqueScans(File(dossierDonnees, "reussites"))
     private val depotIdentite = DepotIdentite(File(dossierDonnees, DepotIdentite.FICHIER))
     private val depotCatalogue = DepotCatalogue(File(dossierDonnees, DepotCatalogue.FICHIER))
-    private val expediteur = Expediteur(file, api)
+    private val expediteur = Expediteur(file, api) { depotIdentite.courante() }
 
     @Volatile private var dernierEnvoiMs = 0L
     @Volatile private var dernierRafraichissementMs = 0L
