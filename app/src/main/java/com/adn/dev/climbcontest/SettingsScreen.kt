@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adn.dev.climbcontest.BuildConfig
+import com.adn.dev.climbcontest.IdentiteAppareil
 import com.adn.dev.climbcontest.MainViewModel
 import com.adn.dev.climbcontest.R
 import com.adn.dev.climbcontest.ui.theme.Alerte
@@ -46,8 +47,12 @@ fun SettingsScreen(
     context: Context,
     onToutEnvoyer: () -> Unit = {},
     onRenvoyerRefusees: () -> Unit = {},
+    identite: IdentiteAppareil? = null,
+    onRenommer: (String) -> Unit = {},
+    onVoirLesScans: () -> Unit = {},
 ) {
     var checked by remember { mutableStateOf(mainViewModel.autoEval) }
+    var nom by remember(identite?.id) { mutableStateOf(identite?.nom.orEmpty()) }
     val enAttente by mainViewModel.enAttente.collectAsState()
     val refusees by mainViewModel.refusees.collectAsState()
     val serveurJoignable by mainViewModel.serveurJoignable.collectAsState()
@@ -138,6 +143,53 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(16.dp))
+
+            // Ce qui identifie ce telephone dans la console (spec 011). Le nom
+            // designe un POSTE — « Mur jaune » — et pas un benevole : les
+            // telephones changent de main dans la journee.
+            if (identite != null) {
+                Section(stringResource(R.string.reglages_telephone)) {
+                    OutlinedTextField(
+                        value = nom,
+                        onValueChange = {
+                            // On coupe a la saisie plutot que d'accepter puis
+                            // tronquer en silence : le juge voit ce qui sera
+                            // garde.
+                            nom = it.take(IdentiteAppareil.LONGUEUR_NOM)
+                            onRenommer(nom)
+                        },
+                        label = { Text(stringResource(R.string.nom_telephone)) },
+                        placeholder = { Text(stringResource(R.string.nom_telephone_exemple)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.nom_telephone_detail),
+                        fontSize = 13.sp,
+                        color = Encre2,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        // Les huit premiers caracteres suffisent a distinguer
+                        // vingt-cinq telephones, et se lisent a voix haute.
+                        text = stringResource(R.string.identifiant_telephone,
+                                              identite.id.take(8)),
+                        fontSize = 12.sp,
+                        color = Encre2,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+                    Spacer(Modifier.height(14.dp))
+                    TextButton(
+                        onClick = onVoirLesScans,
+                        modifier = Modifier.align(Alignment.Start),
+                    ) {
+                        Text(stringResource(R.string.voir_mes_scans))
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
 
             // Fin de compétition : s'assurer que rien ne traîne avant d'éteindre
             // les téléphones. Le bouton ne contourne pas le retrait exponentiel

@@ -99,4 +99,27 @@ object DecisionEnvoi {
      * échec ferait perdre la réussite sans que personne ne s'en aperçoive.
      */
     fun doitReinitialiser(message: MessageJuge): Boolean = message == MessageJuge.VALIDE
+
+    /**
+     * Ce que le **journal des scans** doit retenir d'un envoi par lots.
+     *
+     * Le piège est là : une réussite refusée figure dans les DEUX listes du
+     * bilan. Le serveur a statué sur elle, donc elle est acquittée — elle quitte
+     * la file — et elle est refusée. Laisser l'acquittement l'emporter
+     * afficherait « arrivé » à côté d'un scan que le serveur vient de rejeter,
+     * c'est-à-dire exactement le contraire de la vérité.
+     *
+     * Un refus l'emporte donc toujours sur l'acquittement qui l'accompagne.
+     */
+    fun pourLeJournal(bilan: BilanEnvoi): List<SuiteDeScan> {
+        val refus = bilan.refusees.associateBy { it.ref }
+        return bilan.acquittees.map { ref ->
+            refus[ref]
+                ?.let { SuiteDeScan(ref, EtatScan.REFUSEE, it.message) }
+                ?: SuiteDeScan(ref, EtatScan.PARTIE, null)
+        }
+    }
 }
+
+/** Le sort d'un scan, tel que le journal doit l'inscrire. */
+data class SuiteDeScan(val ref: String, val etat: EtatScan, val motif: String?)

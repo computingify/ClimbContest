@@ -35,6 +35,8 @@ class Server(
 ) {
 
     private val file = FileDeReussites(File(dossierDonnees, "reussites"))
+    private val historique = HistoriqueScans(File(dossierDonnees, "reussites"))
+    private val depotIdentite = DepotIdentite(File(dossierDonnees, DepotIdentite.FICHIER))
     private val depotCatalogue = DepotCatalogue(File(dossierDonnees, DepotCatalogue.FICHIER))
     private val expediteur = Expediteur(file, api)
 
@@ -47,7 +49,24 @@ class Server(
         depotCatalogue.charger()
         mainViewModel.setEnAttente(file.nombreEnAttente())
         mainViewModel.setRefusees(file.nombreRefusees())
+        // Au demarrage, une fois : ce qui a plus de trente jours s'en va. Ne
+        // touche jamais a `file.jsonl`, donc ne peut pas perdre une reussite.
+        historique.purger()
     }
+
+    /** Le journal de tous les scans, pour l'ecran qui les liste. */
+    fun historiqueDesScans(): HistoriqueScans = historique
+
+    /** Qui est ce telephone. Affiche et modifiable dans les reglages. */
+    fun identite(): DepotIdentite = depotIdentite
+
+    /**
+     * Le catalogue courant, pour afficher un nom en face d'un dossard.
+     *
+     * L'ecran des scans ne stocke aucun nom : il les retrouve ici. Un scan
+     * d'une competition passee n'en a donc plus, et montre son dossard.
+     */
+    fun catalogue(): Catalogue = depotCatalogue.courant()
 
     /**
      * Démarre la boucle de fond : envoi par lots et rafraîchissement du catalogue.
@@ -127,11 +146,17 @@ class Server(
 
             val message = DecisionEnvoi.avantEnvoi(dossard, bloc) ?: run {
                 try {
-                    file.ajouter(ReussiteEnAttente(
+                    val reussite = ReussiteEnAttente(
                         ref = UUID.randomUUID().toString(),
                         dossard = dossard!!, bloc = bloc!!,
                         scanneLe = horodatage(),
-                    ))
+                    )
+                    file.ajouter(reussite)
+                    // L'ordre compte : la file d'abord. Elle porte la reussite ;
+                    // le journal n'en garde qu'une trace. Si l'ecriture du
+                    // journal echouait, on perdrait une ligne d'historique, pas
+                    // une reussite.
+                    historique.noter(reussite)
                     // Au journal de l'ecran, pour que le juge puisse relire ce
                     // qu'il vient de faire. C'est la reponse a « est-ce que j'ai
                     // bien envoye ? », qui n'en avait aucune.
@@ -173,7 +198,7 @@ class Server(
      */
     fun renvoyerLesRefusees(portee: CoroutineScope) {
         portee.launch(Dispatchers.IO) {
-            val nombre = expediteur.renvoyerLesRefusees()
+            val nombre = expediteur.renvoyerLesRefusees(historique::reprendre)
             mainViewModel.setEnAttente(file.nombreEnAttente())
             mainViewModel.setRefusees(file.nombreRefusees())
             withContext(Dispatchers.Main) {
@@ -275,11 +300,19 @@ class Server(
         // Ce que le juge doit savoir AVANT que quelque chose echoue : le
         // serveur repond-il ? Il ne l'apprenait qu'en plein geste.
         bilan?.let { mainViewModel.setServeurJoignable(it.aReussi) }
+        bilan?.let(::noterAuJournal)
         bilan?.catalogueVersion?.let { versionServeurConnue = it }
         mainViewModel.setEnAttente(file.nombreEnAttente())
         mainViewModel.setRefusees(file.nombreRefusees())
         bilan?.refusees?.forEach { println("ClimbContest: refus serveur — ${it.message}") }
         return bilan
+    }
+
+    /** Reporte au journal ce que le serveur vient de dire. La regle est ailleurs. */
+    private fun noterAuJournal(bilan: BilanEnvoi) {
+        DecisionEnvoi.pourLeJournal(bilan).forEach {
+            historique.changerEtat(it.ref, it.etat, it.motif)
+        }
     }
 
     private fun rafraichirSiNecessaire() {

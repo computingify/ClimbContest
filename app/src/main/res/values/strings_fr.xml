@@ -53,4 +53,24 @@
     <string name="reglages_file">File d\'attente</string>
     <string name="reglages_serveur">Serveur</string>
     <string name="reglages_refus_detail">Une réussite est refusée quand le serveur ne connaît pas encore le dossard. Dès que l\'organisateur a ajouté le participant, renvoyez-la.</string>
+    <!-- Écran « Mes scans » (spec 011). -->
+    <string name="mes_scans">Mes scans</string>
+    <plurals name="scans_n">
+        <item quantity="one">%d scan</item>
+        <item quantity="other">%d scans</item>
+    </plurals>
+    <string name="filtre_non_arrives">Pas arrivés (%1$d)</string>
+    <string name="scans_aucun">Aucun scan pour l\'instant.\n\nLes réussites que vous validez apparaîtront ici, avec leur état.</string>
+    <string name="scans_tout_est_parti">Tout est arrivé sur le serveur.</string>
+    <string name="scan_partie">Arrivé</string>
+    <string name="scan_en_attente">En attente</string>
+    <string name="scan_refusee">Refusé</string>
+    <string name="dossard_n">Dossard %1$s</string>
+    <!-- Identité du téléphone (spec 011). -->
+    <string name="reglages_telephone">Ce téléphone</string>
+    <string name="nom_telephone">Nom de ce téléphone</string>
+    <string name="nom_telephone_exemple">Mur jaune</string>
+    <string name="nom_telephone_detail">Ce nom apparaît dans la console à côté des réussites envoyées depuis ce téléphone. Il désigne un poste, pas une personne.</string>
+    <string name="identifiant_telephone">Identifiant : %1$s</string>
+    <string name="voir_mes_scans">Voir mes scans</string>
 </resources>

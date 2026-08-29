@@ -175,17 +175,34 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Les trois ecrans. Une enumeration plutot qu'un booleen : ils sont trois. */
+    private enum class Ecran { SAISIE, REGLAGES, SCANS }
+
     @Composable
     fun AppContent() {
-        var isSettingsScreen by remember { mutableStateOf(false) }
+        var ecran by remember { mutableStateOf(Ecran.SAISIE) }
 
-        if (isSettingsScreen) {
+        if (ecran == Ecran.SCANS) {
+            // Relu a chaque ouverture de l'ecran, pas conserve en memoire : le
+            // journal est un fichier, et il bouge pendant qu'on le regarde.
+            val scans = remember(ecran) { server.historiqueDesScans().tous() }
+            val catalogue = remember(ecran) { server.catalogue() }
+            ScansScreen(
+                scans = scans,
+                catalogue = catalogue,
+                onBack = { ecran = Ecran.REGLAGES },
+            )
+        } else if (ecran == Ecran.REGLAGES) {
+            val identite = remember { server.identite().courante() }
             SettingsScreen(
-                onBack = { isSettingsScreen = false },
+                onBack = { ecran = Ecran.SAISIE },
                 mainViewModel,
                 this,
                 onToutEnvoyer = { server.toutEnvoyerMaintenant(lifecycleScope) },
                 onRenvoyerRefusees = { server.renvoyerLesRefusees(lifecycleScope) },
+                identite = identite,
+                onRenommer = { server.identite().renommer(it) },
+                onVoirLesScans = { ecran = Ecran.SCANS },
             )
         } else {
             // Plus de photo de fond : du texte pose sur une photo donne un
@@ -197,7 +214,7 @@ class MainActivity : ComponentActivity() {
                 onScanBloc = { startScanning("bloc") },
                 onSubmit = { server.submit() },
                 onReset = { mainViewModel.reset() },
-                onOpenSettings = { isSettingsScreen = true }
+                onOpenSettings = { ecran = Ecran.REGLAGES }
             )
         }
 
