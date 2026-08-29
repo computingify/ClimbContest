@@ -27,6 +27,51 @@ android {
     //   ./gradlew installDebug                                    -> backend local (emulateur)
     //   ./gradlew installDebug -PserverUrl=https://climbcontest.adn-dev.fr
     //   ./gradlew assembleRelease                                 -> production
+    // La cle d'API des juges (spec 012). Elle ne doit JAMAIS entrer dans le
+    // depot : les deux depots ClimbContest sont publics, et `gradle.properties`
+    // est suivi par git. On la lit donc a la compilation, depuis :
+    //
+    //   1. la ligne de commande     ./gradlew assembleRelease -PreleaseApiKey=...
+    //   2. l'environnement          CLIMBCONTEST_API_KEY=...  (pour la CI)
+    //   3. ~/.gradle/gradle.properties, hors du depot
+    //
+    // ⚠️ Une cle compilee dans un APK distribue publiquement s'extrait en
+    // quelques minutes. Elle arrete un robot qui balaie Internet, pas quelqu'un
+    // qui a l'application et veut fausser la competition. Le choix est
+    // documente dans specs/012-cle-api-juges/spec.md.
+    fun trouverCle(propriete: String): String? =
+        (project.findProperty(propriete) as String?)?.takeIf { it.isNotBlank() }
+            ?: System.getenv("CLIMBCONTEST_API_KEY")?.takeIf { it.isNotBlank() }
+
+    // Le debogage a une valeur par defaut, celle du serveur de developpement :
+    // `installDebug` doit marcher sans rien configurer. Sinon la premiere chose
+    // que ferait un developpeur presse serait de poser la vraie cle dans un
+    // fichier commite.
+    val cleDebug = trouverCle("apiKey") ?: "dev"
+    val cleRelease = trouverCle("releaseApiKey") ?: ""
+
+    // Le release, lui, n'a pas de defaut : un APK sans cle serait refuse par le
+    // serveur, et le decouvrir le jour de la competition serait le pire moment.
+    //
+    // La verification passe par le graphe de taches et NON par un `require()`
+    // dans le bloc `release { }` : ce bloc est evalue a la CONFIGURATION de
+    // Gradle pour n'importe quelle tache, donc un `require` y ferait echouer
+    // `installDebug`. Le meme piege que sur `serverUrl`, deja documente
+    // ci-dessous.
+    gradle.taskGraph.whenReady {
+        val faitUnRelease = allTasks.any {
+            it.name.contains("Release") && it.project.path == project.path
+        }
+        if (faitUnRelease && cleRelease.isBlank()) {
+            throw GradleException(
+                "Cle d'API manquante pour un build release. Relance avec " +
+                "-PreleaseApiKey=... ou pose CLIMBCONTEST_API_KEY dans " +
+                "l'environnement. Ne la mets JAMAIS dans gradle.properties : " +
+                "ce fichier est suivi par git et le depot est public."
+            )
+        }
+    }
+
     buildTypes {
         debug {
             // 10.0.2.2 : la machine hote vue depuis l'emulateur Android.
@@ -34,6 +79,7 @@ android {
             // src/debug/res/xml/network_security_config.xml.
             buildConfigField("String", "SERVER_URL",
                 "\"${project.findProperty("serverUrl") ?: "http://10.0.2.2:5007"}\"")
+            buildConfigField("String", "API_KEY", "\"$cleDebug\"")
         }
         release {
             // Le release lit `releaseServerUrl`, PAS `serverUrl`. Deux raisons,
@@ -57,6 +103,7 @@ android {
                 "L'adresse d'un build release doit etre en HTTPS, obtenu : $urlRelease"
             }
             buildConfigField("String", "SERVER_URL", "\"$urlRelease\"")
+            buildConfigField("String", "API_KEY", "\"$cleRelease\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -78,7 +125,7 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true          // pour SERVER_URL
+        buildConfig = true          // pour SERVER_URL et API_KEY
     }
     packaging {
         resources {

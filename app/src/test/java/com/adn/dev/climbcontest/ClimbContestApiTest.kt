@@ -7,6 +7,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -49,27 +50,89 @@ class ClimbContestApiTest {
         serveur.close()
     }
 
-    // --- Le voyant « serveur joignable » de la barre du haut ---------------
+    // --- La cle d'API sur toutes les requetes (spec 012) --------------------
+
+    private fun apiAvecCle(cle: String) = ClimbContestApi(
+        baseUrl = serveur.url("/").toString().trimEnd('/'),
+        client = OkHttpClient.Builder()
+            .connectTimeout(2, TimeUnit.SECONDS)
+            .readTimeout(2, TimeUnit.SECONDS)
+            .build(),
+        cle = cle,
+    )
 
     @Test
-    fun `un serveur en bonne sante est joignable`() {
-        repondre(200, JSONObject().put("status", "ok").toString())
-        assertTrue(api.estJoignable())
-        assertEquals("/health", serveur.takeRequest().target)
+    fun `verifier un dossard porte la cle`() {
+        repondre(201, JSONObject().put("success", true).put("id", "Dupont").toString())
+
+        apiAvecCle("cle-secrete").verifierGrimpeur("42")
+
+        assertEquals("cle-secrete",
+                     serveur.takeRequest().headers[ClimbContestApi.ENTETE_CLE])
     }
 
     @Test
-    fun `un serveur degrade n'est pas annonce joignable`() {
-        // /health repond 503 quand la base est inutilisable. Le serveur parle,
-        // mais il refusera tout : pour le juge, c'est la meme chose qu'absent.
-        repondre(503, JSONObject().put("status", "degraded").toString())
-        assertFalse(api.estJoignable())
+    fun `verifier un bloc porte la cle`() {
+        repondre(201, JSONObject().put("success", true).put("id", "ZJ6").toString())
+
+        apiAvecCle("cle-secrete").verifierBloc("ZJ6")
+
+        assertEquals("cle-secrete",
+                     serveur.takeRequest().headers[ClimbContestApi.ENTETE_CLE])
     }
 
     @Test
-    fun `un serveur eteint n'est pas joignable`() {
-        serveur.close()
-        assertFalse(api.estJoignable())
+    fun `le catalogue porte la cle, sur un GET`() {
+        repondre(200, JSONObject().put("version", 1)
+            .put("participants", JSONObject()).put("blocs", JSONObject()).toString())
+
+        apiAvecCle("cle-secrete").telechargerCatalogue()
+
+        val requete = serveur.takeRequest()
+        assertEquals("GET", requete.method)
+        assertEquals("cle-secrete", requete.headers[ClimbContestApi.ENTETE_CLE])
+    }
+
+    @Test
+    fun `l'envoi d'un lot porte la cle`() {
+        repondre(200, JSONObject().put("success", true)
+            .put("resultats", org.json.JSONArray()).toString())
+
+        apiAvecCle("cle-secrete").envoyerLot(
+            listOf(ReussiteEnAttente(ref = "a", dossard = "1", bloc = "ZJ6",
+                                     scanneLe = "2026-11-08T10:00:00Z"))
+        )
+
+        assertEquals("cle-secrete",
+                     serveur.takeRequest().headers[ClimbContestApi.ENTETE_CLE])
+    }
+
+    @Test
+    fun `sans cle, aucun en-tete n'est pose`() {
+        // Un `X-Api-Key:` vide serait une cle FAUSSE, donc un 401 -- alors que
+        // l'absence d'en-tete reste acceptee par un serveur en mode tolere.
+        // Les deux ne sont pas interchangeables.
+        repondre(201, JSONObject().put("success", true).put("id", "Dupont").toString())
+
+        apiAvecCle("").verifierGrimpeur("42")
+
+        assertNull(serveur.takeRequest().headers[ClimbContestApi.ENTETE_CLE])
+    }
+
+    @Test
+    fun `une cle refusee ne fait rien acquitter`() {
+        // L'invariant de l'Expediteur tient aussi pour un 401 : le serveur n'a
+        // statue sur RIEN, donc la file garde tout et reessaiera.
+        repondre(401, JSONObject().put("success", false)
+            .put("message", "Cle d'API requise").toString())
+
+        val resultat = apiAvecCle("mauvaise").envoyerLot(
+            listOf(ReussiteEnAttente(ref = "a", dossard = "1", bloc = "ZJ6",
+                                     scanneLe = "2026-11-08T10:00:00Z"))
+        )
+
+        assertEquals(emptySet<String>(), resultat.acquittees)
+        assertEquals(401, resultat.codeHttp)
     }
 
     // --- L'identite du telephone dans le lot (spec 011) ---------------------

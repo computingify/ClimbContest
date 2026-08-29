@@ -25,6 +25,16 @@ import java.util.concurrent.TimeUnit
 class ClimbContestApi(
     baseUrl: String = BuildConfig.SERVER_URL,
     private val client: OkHttpClient = defaultClient(),
+    /**
+     * La clé d'API des juges (spec 012).
+     *
+     * Compilée dans l'APK, jamais dans le dépôt — voir `app/build.gradle.kts`.
+     * Vide en développement si personne ne l'a configurée : l'en-tête n'est
+     * alors pas posé du tout, ce qui n'est pas la même chose qu'un en-tête
+     * vide. Un `X-Api-Key:` vide serait une clé **fausse**, donc un `401`,
+     * là où l'absence d'en-tête reste acceptée par un serveur en mode toléré.
+     */
+    private val cle: String = BuildConfig.API_KEY,
 ) {
 
     // Normalise ici, pas chez l'appelant : une adresse collee depuis un
@@ -32,8 +42,22 @@ class ClimbContestApi(
     // « //api/v2/contest/success ». Certains proxys le suivent, d'autres non.
     private val baseUrl: String = baseUrl.trimEnd('/')
 
+    /** Pose la clé sur une requête, quand il y en a une. */
+    private fun Request.Builder.avecCle(): Request.Builder =
+        if (cle.isNotBlank()) header(ENTETE_CLE, cle) else this
+
     companion object {
         private val JSON = "application/json".toMediaTypeOrNull()
+
+        /**
+         * L'en-tête plutôt que le corps.
+         *
+         * Le serveur accepte les deux depuis la spec 001, mais l'en-tête
+         * marche sur un `GET` — le catalogue n'a pas de corps — et ne modifie
+         * pas la charge utile, donc les tests de contrat sur le format des
+         * lots restent valables tels quels.
+         */
+        const val ENTETE_CLE = "X-Api-Key"
 
         /**
          * Client par défaut.
@@ -82,27 +106,6 @@ class ClimbContestApi(
         poster("success", JSONObject().put("bib", dossard).put("bloc", tag))
 
     /**
-     * « Es-tu là ? » — la question la moins chère qu'on puisse poser.
-     *
-     * Le voyant de la barre du haut annonce l'état du serveur. Sans cet appel,
-     * il ne repose que sur le dernier échange **utile** : un envoi (il n'y en a
-     * que si le juge scanne) ou le rafraîchissement du catalogue (toutes les
-     * cinq minutes). Un téléphone posé sur une table pendant que le réseau
-     * tombe affichait donc « Serveur joignable » pendant cinq minutes. Un
-     * voyant qui ment est pire que pas de voyant.
-     *
-     * `/health` répond 503 quand la base est inutilisable : pour le juge, un
-     * serveur qui refusera tout équivaut à un serveur absent, d'où le test sur
-     * 200 et non sur « a répondu ».
-     */
-    fun estJoignable(): Boolean = try {
-        val requete = Request.Builder().url("$baseUrl/health").get().build()
-        client.newCall(requete).execute().use { it.code == 200 }
-    } catch (e: Exception) {
-        false
-    }
-
-    /**
      * Télécharge le catalogue.
      *
      * [versionConnue] est envoyée en `If-None-Match` : si rien n'a bougé, le
@@ -113,6 +116,7 @@ class ClimbContestApi(
         val requete = Request.Builder()
             .url("$baseUrl/api/v2/catalog")
             .get()
+            .avecCle()
             .apply { versionConnue?.let { header("If-None-Match", "\"$it\"") } }
             .build()
 
@@ -164,6 +168,7 @@ class ClimbContestApi(
         val requete = Request.Builder()
             .url("$baseUrl/api/v3/successes")
             .post(corps.toString().toRequestBody(JSON))
+            .avecCle()
             .build()
 
         return try {
@@ -220,6 +225,7 @@ class ClimbContestApi(
         val requete = Request.Builder()
             .url("$baseUrl/api/v2/contest/$chemin")
             .post(corps.toString().toRequestBody(JSON))
+            .avecCle()
             .build()
 
         return try {
