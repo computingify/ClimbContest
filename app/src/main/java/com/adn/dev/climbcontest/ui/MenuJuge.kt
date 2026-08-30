@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -62,6 +63,7 @@ fun MenuJuge(
     refusees: Int,
     onFermer: () -> Unit,
     onMesScans: () -> Unit,
+    onVoirEnAttente: () -> Unit,
     onReglages: () -> Unit,
     onToutEnvoyer: () -> Unit,
     onRenvoyerRefusees: () -> Unit,
@@ -87,18 +89,33 @@ fun MenuJuge(
                 LigneMenu(
                     icone = Icons.Filled.Refresh,
                     titre = pluralStringResource(R.plurals.refusees_n, refusees, refusees),
-                    detail = stringResource(R.string.reglages_refus_detail),
+                    detail = stringResource(R.string.menu_refus_detail),
                     accent = Alerte,
                     onClick = { onFermer(); onRenvoyerRefusees() },
+                )
+            }
+
+            // ⚠️ VOIR et ENVOYER sont deux lignes distinctes.
+            //
+            // « Tout envoyer » disait déjà « 3 en attente » en sous-titre, et
+            // c'était la seule mention de ces trois-là dans toute
+            // l'application : pour savoir LESQUELLES, il fallait deviner
+            // qu'elles étaient dans « Mes scans », derrière un filtre.
+            if (enAttente > 0) {
+                LigneMenu(
+                    icone = Icons.Filled.Schedule,
+                    titre = stringResource(R.string.en_attente, enAttente),
+                    detail = stringResource(R.string.menu_en_attente_detail),
+                    accent = Attention,
+                    onClick = { onFermer(); onVoirEnAttente() },
                 )
             }
 
             LigneMenu(
                 icone = Icons.Filled.ArrowUpward,
                 titre = stringResource(R.string.tout_envoyer),
-                detail = if (enAttente > 0)
-                    stringResource(R.string.en_attente, enAttente)
-                else stringResource(R.string.file_vide),
+                detail = if (enAttente > 0) stringResource(R.string.menu_envoyer_detail)
+                         else stringResource(R.string.file_vide),
                 accent = if (enAttente > 0) Attention else null,
                 actif = enAttente > 0,
                 onClick = { onFermer(); onToutEnvoyer() },

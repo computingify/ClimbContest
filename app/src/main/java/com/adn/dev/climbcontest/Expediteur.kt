@@ -43,9 +43,21 @@ object PolitiqueEnvoi {
     /**
      * Faut-il tenter un envoi maintenant ?
      *
-     * [forcer] correspond au bouton « tout envoyer maintenant » : il ignore le
-     * lot et le délai, mais **pas** le retrait — sinon appuyer en boucle sur un
-     * serveur éteint noierait le téléphone de requêtes.
+     * [forcer] correspond au geste du juge : la pastille « 3 en attente » ou le
+     * « Tout envoyer » du menu. Il ignore le lot, le délai, et **rabat le
+     * retrait à son premier palier**.
+     *
+     * ⚠️ Le retrait était auparavant opposé au juge comme au reste, avec pour
+     * raison qu'appuyer en boucle sur un serveur éteint noierait le téléphone
+     * de requêtes. Mais après cinq échecs le retrait vaut trente secondes :
+     * pendant tout ce temps, appuyer sur « 3 en attente » ne tentait **rien du
+     * tout** et affichait « il en reste 3 » — un bouton qui répond en donnant
+     * l'impression d'avoir échoué alors qu'il n'a pas essayé.
+     *
+     * Le plancher de [RETRAIT_INITIAL_MS] suffit à la protection d'origine : il
+     * borne un juge nerveux à une requête toutes les deux secondes, ce qu'un
+     * aller-retour réseau coûte de toute façon. Et il ne s'applique qu'après un
+     * échec — sur un serveur qui répond, le geste part toujours.
      */
     fun doitEnvoyer(
         enAttente: Int,
@@ -54,7 +66,10 @@ object PolitiqueEnvoi {
         forcer: Boolean = false,
     ): Boolean {
         if (enAttente <= 0) return false
-        if (msDepuisDernierEnvoi < attenteApresEchec(echecsConsecutifs)) return false
+        val retrait = attenteApresEchec(echecsConsecutifs).let {
+            if (forcer) minOf(it, RETRAIT_INITIAL_MS) else it
+        }
+        if (msDepuisDernierEnvoi < retrait) return false
         if (forcer) return true
         return enAttente >= LOT_PLEIN || msDepuisDernierEnvoi >= DELAI_MS
     }

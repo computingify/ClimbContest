@@ -192,6 +192,9 @@ class MainActivity : ComponentActivity() {
 
         var menuOuvert by remember { mutableStateOf(false) }
 
+        // « Mes scans » s'ouvre filtré quand on y arrive par « N en attente ».
+        var scansFiltres by remember { mutableStateOf(false) }
+
         if (ecran == Ecran.SCANS) {
             // Relu a chaque ouverture de l'ecran, pas conserve en memoire : le
             // journal est un fichier, et il bouge pendant qu'on le regarde.
@@ -200,6 +203,7 @@ class MainActivity : ComponentActivity() {
             ScansScreen(
                 scans = scans,
                 catalogue = catalogue,
+                filtreInitial = scansFiltres,
                 onBack = { ecran = retourDesScans },
             )
         } else if (ecran == Ecran.REGLAGES) {
@@ -212,7 +216,11 @@ class MainActivity : ComponentActivity() {
                 onRenvoyerRefusees = { server.renvoyerLesRefusees(lifecycleScope) },
                 identite = identite,
                 onRenommer = { server.identite().renommer(it) },
-                onVoirLesScans = { retourDesScans = Ecran.REGLAGES; ecran = Ecran.SCANS },
+                onVoirLesScans = {
+                    retourDesScans = Ecran.REGLAGES
+                    scansFiltres = false
+                    ecran = Ecran.SCANS
+                },
             )
         } else {
             // Plus de photo de fond : du texte pose sur une photo donne un
@@ -228,6 +236,7 @@ class MainActivity : ComponentActivity() {
             val historique by mainViewModel.historique.collectAsState()
             val joignable by mainViewModel.serveurJoignable.collectAsState()
             val validations by mainViewModel.validations.collectAsState()
+            val envoiEnCours by mainViewModel.envoiEnCours.collectAsState()
 
             EcranJuge(
                 dossard = dossard,
@@ -241,6 +250,7 @@ class MainActivity : ComponentActivity() {
                 enAttente = enAttente,
                 refusees = refusees,
                 historique = historique,
+                envoiEnCours = envoiEnCours,
                 validations = validations,
                 serveurJoignable = joignable,
                 onScanGrimpeur = { startScanning("climber") },
@@ -256,7 +266,16 @@ class MainActivity : ComponentActivity() {
                     enAttente = enAttente,
                     refusees = refusees,
                     onFermer = { menuOuvert = false },
-                    onMesScans = { retourDesScans = Ecran.SAISIE; ecran = Ecran.SCANS },
+                    onMesScans = {
+                        retourDesScans = Ecran.SAISIE
+                        scansFiltres = false
+                        ecran = Ecran.SCANS
+                    },
+                    onVoirEnAttente = {
+                        retourDesScans = Ecran.SAISIE
+                        scansFiltres = true
+                        ecran = Ecran.SCANS
+                    },
                     onReglages = { ecran = Ecran.REGLAGES },
                     onToutEnvoyer = { server.toutEnvoyerMaintenant(lifecycleScope) },
                     onRenvoyerRefusees = { server.renvoyerLesRefusees(lifecycleScope) },

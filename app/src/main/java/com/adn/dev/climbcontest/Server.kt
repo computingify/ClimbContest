@@ -212,13 +212,16 @@ class Server(
      */
     fun renvoyerLesRefusees(portee: CoroutineScope) {
         portee.launch(Dispatchers.IO) {
+            mainViewModel.setEnvoiEnCours(true)
             val nombre = expediteur.renvoyerLesRefusees(historique::reprendre)
             mainViewModel.setEnAttente(file.nombreEnAttente())
             mainViewModel.setRefusees(file.nombreRefusees())
             withContext(Dispatchers.Main) {
                 toast(if (nombre == 0) R.string.aucun_refus else R.string.refus_renvoyes)
             }
-            envoyer(forcer = true)
+            try { envoyer(forcer = true) } finally {
+                mainViewModel.setEnvoiEnCours(false)
+            }
             mainViewModel.setEnAttente(file.nombreEnAttente())
             mainViewModel.setRefusees(file.nombreRefusees())
         }
@@ -227,13 +230,22 @@ class Server(
     /** Le bouton « tout envoyer maintenant », pour la fin de compétition. */
     fun toutEnvoyerMaintenant(portee: CoroutineScope) {
         portee.launch(Dispatchers.IO) {
-            val bilan = envoyer(forcer = true)
+            mainViewModel.setEnvoiEnCours(true)
+            val bilan = try { envoyer(forcer = true) } finally {
+                mainViewModel.setEnvoiEnCours(false)
+            }
             withContext(Dispatchers.Main) {
                 val restantes = file.nombreEnAttente()
+                // ⚠️ Quatre cas, et non trois. « Il en reste 3 » couvrait aussi
+                // « le serveur n'a pas repondu » et « je n'ai meme pas essaye »,
+                // qui appellent des gestes differents : attendre, ou aller voir
+                // le wifi. Un juge ne peut pas choisir sur un message unique.
                 val texte = when {
-                    bilan == null && restantes == 0 -> context.getString(R.string.file_vide)
-                    bilan?.aReussi == true && restantes == 0 ->
+                    restantes == 0 && bilan?.aReussi == true ->
                         context.getString(R.string.file_envoyee)
+                    restantes == 0 -> context.getString(R.string.file_vide)
+                    bilan == null -> context.getString(R.string.file_trop_tot, restantes)
+                    !bilan.aReussi -> context.getString(R.string.file_serveur_muet, restantes)
                     else -> context.getString(R.string.file_reste, restantes)
                 }
                 Toast.makeText(context, texte, Toast.LENGTH_LONG).show()
