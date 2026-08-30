@@ -54,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adn.dev.climbcontest.ui.EcranJuge
+import com.adn.dev.climbcontest.ui.MenuJuge
 import com.adn.dev.climbcontest.ui.theme.ClimbContestTheme
 import com.google.android.gms.common.moduleinstall.ModuleInstall
 import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
@@ -183,6 +184,14 @@ class MainActivity : ComponentActivity() {
     fun AppContent() {
         var ecran by remember { mutableStateOf(Ecran.SAISIE) }
 
+        // D'ou l'on vient quand on ouvre « Mes scans » : le menu de l'ecran de
+        // saisie, ou les reglages. Sans cela, le retour ramenait toujours aux
+        // reglages -- un juge qui n'y etait jamais alle y atterrissait sans
+        // comprendre pourquoi.
+        var retourDesScans by remember { mutableStateOf(Ecran.SAISIE) }
+
+        var menuOuvert by remember { mutableStateOf(false) }
+
         if (ecran == Ecran.SCANS) {
             // Relu a chaque ouverture de l'ecran, pas conserve en memoire : le
             // journal est un fichier, et il bouge pendant qu'on le regarde.
@@ -191,7 +200,7 @@ class MainActivity : ComponentActivity() {
             ScansScreen(
                 scans = scans,
                 catalogue = catalogue,
-                onBack = { ecran = Ecran.REGLAGES },
+                onBack = { ecran = retourDesScans },
             )
         } else if (ecran == Ecran.REGLAGES) {
             val identite = remember { server.identite().courante() }
@@ -203,7 +212,7 @@ class MainActivity : ComponentActivity() {
                 onRenvoyerRefusees = { server.renvoyerLesRefusees(lifecycleScope) },
                 identite = identite,
                 onRenommer = { server.identite().renommer(it) },
-                onVoirLesScans = { ecran = Ecran.SCANS },
+                onVoirLesScans = { retourDesScans = Ecran.REGLAGES; ecran = Ecran.SCANS },
             )
         } else {
             // Plus de photo de fond : du texte pose sur une photo donne un
@@ -218,6 +227,7 @@ class MainActivity : ComponentActivity() {
             val refusees by mainViewModel.refusees.collectAsState()
             val historique by mainViewModel.historique.collectAsState()
             val joignable by mainViewModel.serveurJoignable.collectAsState()
+            val validations by mainViewModel.validations.collectAsState()
 
             EcranJuge(
                 dossard = dossard,
@@ -231,14 +241,27 @@ class MainActivity : ComponentActivity() {
                 enAttente = enAttente,
                 refusees = refusees,
                 historique = historique,
+                validations = validations,
                 serveurJoignable = joignable,
                 onScanGrimpeur = { startScanning("climber") },
                 onScanBloc = { startScanning("bloc") },
                 onEnvoyer = { server.submit() },
                 onEffacer = { mainViewModel.reset() },
-                onMenu = { ecran = Ecran.REGLAGES },
+                onMenu = { menuOuvert = true },
                 onToutEnvoyer = { server.toutEnvoyerMaintenant(lifecycleScope) },
             )
+
+            if (menuOuvert) {
+                MenuJuge(
+                    enAttente = enAttente,
+                    refusees = refusees,
+                    onFermer = { menuOuvert = false },
+                    onMesScans = { retourDesScans = Ecran.SAISIE; ecran = Ecran.SCANS },
+                    onReglages = { ecran = Ecran.REGLAGES },
+                    onToutEnvoyer = { server.toutEnvoyerMaintenant(lifecycleScope) },
+                    onRenvoyerRefusees = { server.renvoyerLesRefusees(lifecycleScope) },
+                )
+            }
         }
 
     }

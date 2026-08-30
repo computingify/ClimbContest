@@ -50,6 +50,22 @@ class MainViewModel : ViewModel() {
         _blocCouleur.value = couleur
     }
 
+    /**
+     * Combien de réussites ce téléphone a validées depuis son démarrage.
+     *
+     * Ce n'est pas un compteur pour l'affichage : c'est un **signal**. L'écran
+     * l'observe et joue sa confirmation quand il change. Un compteur plutôt
+     * qu'un `SharedFlow` parce qu'il survit à une recomposition et à une
+     * rotation — un évènement perdu, c'est une confirmation qui ne se joue pas,
+     * et un juge qui se demande s'il a validé.
+     */
+    private val _validations = MutableStateFlow(0)
+    val validations: StateFlow<Int> = _validations
+
+    fun signalerValidation() {
+        _validations.value++
+    }
+
     private val _autoEval = false
     var autoEval = _autoEval
 
