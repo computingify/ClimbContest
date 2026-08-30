@@ -25,6 +25,19 @@ class Catalogue(
     private val parTag: Map<String, String>,
     /** Version du catalogue côté serveur. Sert à savoir s'il faut rafraîchir. */
     val version: Int,
+    /**
+     * tag du bloc → **couleur de son circuit**, telle que le serveur la nomme :
+     * « Jaune », « Vert », « Bleu », « Mauve », « Rouge », « Noir ».
+     *
+     * Ajoutée pour la refonte visuelle : l'écran prend la couleur du bloc
+     * scanné. Ce n'est pas de la décoration — un juge vérifie d'un coup d'œil
+     * qu'il est sur le bon circuit, ce que le tag seul ne dit pas à quelqu'un
+     * qui ne connaît pas la convention de nommage par cœur.
+     *
+     * Facultative : un bloc sans couleur reste parfaitement utilisable, l'écran
+     * se contente alors de sa teinte neutre.
+     */
+    private val couleurParTag: Map<String, String> = emptyMap(),
 ) {
 
     val nombreParticipants: Int get() = parDossard.size
@@ -37,10 +50,14 @@ class Catalogue(
     /** Le libellé du bloc, ou `null` si ce tag est inconnu **localement**. */
     fun bloc(tag: String): String? = parTag[tag.trim().uppercase()]
 
+    /** La couleur de circuit de ce bloc, telle que le serveur la nomme. */
+    fun couleurDuBloc(tag: String): String? = couleurParTag[tag.trim().uppercase()]
+
     fun versJson(): String = JSONObject().apply {
         put("version", version)
         put("participants", JSONObject(parDossard as Map<*, *>))
         put("blocs", JSONObject(parTag as Map<*, *>))
+        put("couleurs", JSONObject(couleurParTag as Map<*, *>))
     }.toString()
 
     companion object {
@@ -57,6 +74,7 @@ class Catalogue(
             val o = JSONObject(corps)
             val dossards = mutableMapOf<String, String>()
             val tags = mutableMapOf<String, String>()
+            val couleurs = mutableMapOf<String, String>()
 
             o.optJSONArray("participants")?.let { tableau ->
                 for (i in 0 until tableau.length()) {
@@ -70,10 +88,14 @@ class Catalogue(
                 for (i in 0 until tableau.length()) {
                     val b = tableau.optJSONObject(i) ?: continue
                     val tag = b.optString("tag")
-                    if (tag.isNotBlank()) tags[tag.uppercase()] = tag
+                    if (tag.isBlank()) continue
+                    tags[tag.uppercase()] = tag
+                    // Facultative : un bloc sans couleur reste utilisable.
+                    b.optString("couleur").takeIf { it.isNotBlank() }
+                        ?.let { couleurs[tag.uppercase()] = it }
                 }
             }
-            Catalogue(dossards, tags, o.optInt("version", 0))
+            Catalogue(dossards, tags, o.optInt("version", 0), couleurs)
         } catch (e: Exception) {
             null
         }
@@ -85,10 +107,16 @@ class Catalogue(
                 val o = JSONObject(fichier.readText(Charsets.UTF_8))
                 val p = o.getJSONObject("participants")
                 val b = o.getJSONObject("blocs")
+                // Les couleurs sont arrivees apres : un catalogue range par une
+                // version anterieure n'en a pas, et doit rester lisible. Sans
+                // ce `opt`, la relecture echouait et le catalogue entier etait
+                // jete a la premiere mise a jour.
+                val c = o.optJSONObject("couleurs")
                 Catalogue(
                     p.keys().asSequence().associateWith { p.getString(it) },
                     b.keys().asSequence().associateWith { b.getString(it) },
                     o.optInt("version", 0),
+                    c?.keys()?.asSequence()?.associateWith { c.getString(it) } ?: emptyMap(),
                 )
             } catch (e: Exception) {
                 // Un catalogue abîmé se retélécharge. Il ne doit jamais empêcher

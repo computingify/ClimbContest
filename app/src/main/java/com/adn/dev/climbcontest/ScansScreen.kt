@@ -47,10 +47,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.adn.dev.climbcontest.ui.theme.Alerte
 import com.adn.dev.climbcontest.ui.theme.Attention
-import com.adn.dev.climbcontest.ui.theme.Carte
+import com.adn.dev.climbcontest.ui.theme.CarteFaite
 import com.adn.dev.climbcontest.ui.theme.Encre
 import com.adn.dev.climbcontest.ui.theme.Encre2
-import com.adn.dev.climbcontest.ui.theme.EtatFait
+import com.adn.dev.climbcontest.ui.theme.Vert
 
 /**
  * Tout ce que ce téléphone a scanné, et où ça en est.
@@ -91,7 +91,7 @@ fun ScansScreen(
     ) {
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Carte,
+                containerColor = CarteFaite,
                 titleContentColor = Encre,
             ),
             navigationIcon = {
@@ -168,7 +168,7 @@ private fun Vide(filtreActif: Boolean) {
 @Composable
 private fun LigneScan(scan: ScanJournalise, catalogue: Catalogue) {
     val (couleur, libelle) = when (scan.etat) {
-        EtatScan.PARTIE -> EtatFait to stringResource(R.string.scan_partie)
+        EtatScan.PARTIE -> Vert to stringResource(R.string.scan_partie)
         EtatScan.EN_ATTENTE -> Attention to stringResource(R.string.scan_en_attente)
         EtatScan.REFUSEE -> Alerte to stringResource(R.string.scan_refusee)
     }
@@ -178,7 +178,7 @@ private fun LigneScan(scan: ScanJournalise, catalogue: Catalogue) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .background(Carte, RoundedCornerShape(12.dp))
+            .background(CarteFaite, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

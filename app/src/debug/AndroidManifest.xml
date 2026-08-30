@@ -11,6 +11,21 @@
 
     <application
         android:networkSecurityConfig="@xml/network_security_config"
-        tools:replace="android:networkSecurityConfig" />
+        tools:replace="android:networkSecurityConfig">
+
+        <!-- Ecran de maquettes, pour choisir une direction visuelle. Jetable,
+             et cantonne au source set `debug` : il n'entre dans aucun APK de
+             production.
+
+             `exported` a true parce qu'`adb shell am start` tourne sous un
+             autre utilisateur : une activite non exportee lui est refusee, et
+             le lanceur reste affiche sans le moindre message. Sans risque ici,
+             le source set `debug` ne quittant jamais cette machine. -->
+        <activity
+            android:name=".maquettes.MaquettesActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ClimbContest" />
+
+    </application>
 
 </manifest>

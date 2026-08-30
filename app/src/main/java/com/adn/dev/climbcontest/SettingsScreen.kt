@@ -23,11 +23,11 @@ import com.adn.dev.climbcontest.MainViewModel
 import com.adn.dev.climbcontest.R
 import com.adn.dev.climbcontest.ui.theme.Alerte
 import com.adn.dev.climbcontest.ui.theme.Attention
-import com.adn.dev.climbcontest.ui.theme.Carte
+import com.adn.dev.climbcontest.ui.theme.CarteFaite
 import com.adn.dev.climbcontest.ui.theme.Encre
 import com.adn.dev.climbcontest.ui.theme.Encre2
-import com.adn.dev.climbcontest.ui.theme.EtatFait
-import com.adn.dev.climbcontest.ui.theme.EtatVide
+import com.adn.dev.climbcontest.ui.theme.Vert
+import com.adn.dev.climbcontest.ui.theme.CarteAttente
 
 /**
  * Les réglages, et l'état de ce qui n'est pas encore parti.
@@ -74,7 +74,7 @@ fun SettingsScreen(
     ) {
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Carte,
+                containerColor = CarteFaite,
                 titleContentColor = Encre,
             ),
             navigationIcon = {
@@ -127,10 +127,10 @@ fun SettingsScreen(
                         checked = checked,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Encre,
-                            checkedTrackColor = EtatFait,
+                            checkedTrackColor = Vert,
                             uncheckedThumbColor = Encre2,
-                            uncheckedTrackColor = EtatVide,
-                            uncheckedBorderColor = EtatVide,
+                            uncheckedTrackColor = CarteAttente,
+                            uncheckedBorderColor = CarteAttente,
                         ),
                         onCheckedChange = {
                             checked = it
@@ -254,7 +254,7 @@ fun SettingsScreen(
             Section(stringResource(R.string.reglages_serveur)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val (pastille, texte) = when (serveurJoignable) {
-                        true -> EtatFait to stringResource(R.string.serveur_ok)
+                        true -> Vert to stringResource(R.string.serveur_ok)
                         false -> Alerte to stringResource(R.string.serveur_ko)
                         null -> Encre2 to stringResource(R.string.serveur_inconnu)
                     }
@@ -295,7 +295,7 @@ private fun Section(titre: String, contenu: @Composable ColumnScope.() -> Unit) 
     )
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = Carte,
+        color = CarteFaite,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp), content = contenu)

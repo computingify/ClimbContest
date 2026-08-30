@@ -73,4 +73,14 @@
     <string name="nom_telephone_detail">Ce nom apparaît dans la console à côté des réussites envoyées depuis ce téléphone. Il désigne un poste, pas une personne.</string>
     <string name="identifiant_telephone">Identifiant : %1$s</string>
     <string name="voir_mes_scans">Voir mes scans</string>
+    <!-- Refonte visuelle du 30/08 : l'ecran devient une sequence de trois
+         etapes numerotees, une seule active a la fois. -->
+    <string name="toucher_pour_scanner">Toucher pour scanner</string>
+    <string name="ensuite">Ensuite</string>
+    <string name="apres_le_bloc">Après le bloc</string>
+    <string name="apres_les_scans">Après les deux scans</string>
+    <string name="pret">Prêt</string>
+    <string name="menu">Menu</string>
+    <string name="circuit_x">Circuit %1$s</string>
+    <string name="numero_dossard">N° %1$s</string>
 </resources>

@@ -17,16 +17,16 @@ import androidx.compose.runtime.Composable
  * éblouit quand on lève les yeux vers le mur.
  */
 private val Schema = darkColorScheme(
-    primary = Bleu,
-    onPrimary = Encre,
+    primary = Jaune,
+    onPrimary = encreSur(Jaune),
     secondary = Mauve,
     background = Fond,
     onBackground = Encre,
-    surface = Carte,
+    surface = CarteFaite,
     onSurface = Encre,
-    surfaceVariant = Carte2,
+    surfaceVariant = CarteActive,
     onSurfaceVariant = Encre2,
-    outline = Trait,
+    outline = TraitActif,
     error = Alerte,
     onError = Fond,
 )
