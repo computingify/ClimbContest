@@ -10,7 +10,13 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,17 +39,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -71,6 +85,7 @@ import com.adn.dev.climbcontest.ui.theme.TraitFait
 import com.adn.dev.climbcontest.ui.theme.Vert
 import com.adn.dev.climbcontest.ui.theme.couleurDeCircuit
 import com.adn.dev.climbcontest.ui.theme.encreSur
+import kotlinx.coroutines.launch
 
 /**
  * L'écran du juge : **trois étapes numérotées, une seule active à la fois**.
@@ -96,6 +111,14 @@ fun EcranJuge(
     enAttente: Int,
     refusees: Int,
     historique: List<Validation>,
+    /**
+     * Le nombre de réussites validées depuis le lancement.
+     *
+     * Un **compteur** et non un événement : une rotation d'écran rejoue une
+     * `SharedFlow` non consommée ou, pire, en perd une. Ici l'écran compare ce
+     * qu'il a déjà fêté à ce que le compteur dit ; la question ne se pose pas.
+     */
+    validations: Int,
     serveurJoignable: Boolean?,
     onScanGrimpeur: () -> Unit,
     onScanBloc: () -> Unit,
@@ -108,108 +131,202 @@ fun EcranJuge(
     val blocFait = bloc != null
     val couleur = couleurDeCircuit(couleurDuBloc) ?: Encre
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Fond)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp),
-    ) {
-        Spacer(Modifier.height(54.dp))
+    // Ce que les cartes affichent — y compris pendant les 110 ms où elles
+    // s'effacent. Voir `retenu`.
+    val nomAffiche = retenu(grimpeur)
+    val dossardAffiche = retenu(dossard)
+    val blocAffiche = retenu(bloc)
+    val circuitAffiche = retenu(couleurDuBloc)
+    val teinteAffichee = couleurDeCircuit(circuitAffiche) ?: Encre
 
-        Entete(
-            enAttente = enAttente,
-            refusees = refusees,
-            serveurJoignable = serveurJoignable,
-            onToutEnvoyer = onToutEnvoyer,
-            onMenu = onMenu,
-        )
+    // --- Le moment de validation ---------------------------------------------
+    //
+    // Le seul instant de la journée où l'écran s'autorise à parler fort. Il dure
+    // 700 ms et ne bloque RIEN : un juge qui enchaîne peut rescanner pendant que
+    // la coche est encore là. C'est la contrainte qui a écarté l'animation
+    // plein écran d'une seconde : deux cents validations par jour, c'est trois
+    // minutes passées à regarder une animation.
+    val haptique = LocalHapticFeedback.current
+    val moment = remember { Animatable(0f) }
+    val rebond = remember { Animatable(0f) }
+    var enConfirmation by remember { mutableStateOf(false) }
+    var vues by remember { mutableIntStateOf(validations) }
 
-        Spacer(Modifier.height(30.dp))
+    // ⚠️ La couleur est saisie AU CLIC. 500 ms après l'envoi le ViewModel a
+    // tout effacé et `couleur` est revenue au neutre : la lire pendant
+    // l'animation aurait fait blanchir la confirmation en cours de route.
+    var couleurValidee by remember { mutableStateOf(Encre) }
 
-        CarteEtape(
-            numero = "1",
-            etiquette = stringResource(R.string.climber).uppercase(),
-            fait = grimpeurFait,
-            active = !grimpeurFait,
-            onClick = onScanGrimpeur,
-        ) {
-            Text(
-                grimpeur ?: dossard.orEmpty(),
-                fontFamily = Titre, fontSize = 30.sp, letterSpacing = (-0.6).sp,
-                color = Encre, maxLines = 1, overflow = TextOverflow.Ellipsis,
+    LaunchedEffect(validations) {
+        // À la première composition — et après chaque rotation — le compteur
+        // vaut déjà ce qu'il vaut : il n'y a rien à fêter.
+        if (validations == vues) return@LaunchedEffect
+        vues = validations
+        haptique.performHapticFeedback(HapticFeedbackType.Confirm)
+        enConfirmation = true
+        moment.snapTo(0f)
+        rebond.snapTo(0f)
+        launch {
+            rebond.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.42f,
+                                       stiffness = Spring.StiffnessMedium),
             )
-            if (grimpeur != null && dossard != null) {
-                Spacer(Modifier.height(5.dp))
-                Text(
-                    stringResource(R.string.numero_dossard, dossard),
-                    fontFamily = Moyen, fontSize = 14.sp,
-                    letterSpacing = 0.8.sp, color = Encre2,
-                )
-            }
         }
+        moment.animateTo(1f, tween(700, easing = LinearEasing))
+        enConfirmation = false
+    }
 
-        Spacer(Modifier.height(14.dp))
+    val confirmation =
+        if (enConfirmation) Confirmation(couleurValidee, moment.value, rebond.value)
+        else null
 
-        CarteEtape(
-            numero = "2",
-            etiquette = stringResource(R.string.block).uppercase(),
-            fait = blocFait,
-            active = grimpeurFait && !blocFait,
-            teinte = if (blocFait) couleur else null,
-            onClick = onScanBloc,
+    Box(Modifier.fillMaxSize().background(Fond)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Le tag dans une pastille pleine : c'est LUI que le juge
-                // vérifie, pas la phrase à côté.
+            Spacer(Modifier.height(54.dp))
+
+            Entete(
+                enAttente = enAttente,
+                refusees = refusees,
+                serveurJoignable = serveurJoignable,
+                onToutEnvoyer = onToutEnvoyer,
+                onMenu = onMenu,
+            )
+
+            Spacer(Modifier.height(30.dp))
+
+            CarteEtape(
+                numero = "1",
+                etiquette = stringResource(R.string.climber).uppercase(),
+                fait = grimpeurFait,
+                active = !grimpeurFait,
+                onClick = onScanGrimpeur,
+            ) {
                 Text(
-                    bloc.orEmpty(),
-                    fontFamily = Titre, fontSize = 32.sp, letterSpacing = (-0.5).sp,
-                    color = encreSur(couleur),
-                    modifier = Modifier
-                        .background(couleur, RoundedCornerShape(14.dp))
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    nomAffiche ?: dossardAffiche.orEmpty(),
+                    fontFamily = Titre, fontSize = 30.sp, letterSpacing = (-0.6).sp,
+                    color = Encre, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-                if (couleurDuBloc != null) {
-                    Spacer(Modifier.width(14.dp))
+                if (nomAffiche != null && dossardAffiche != null) {
+                    Spacer(Modifier.height(5.dp))
                     Text(
-                        stringResource(R.string.circuit_x, couleurDuBloc),
-                        fontFamily = Moyen, fontSize = 16.sp,
-                        color = couleur.copy(alpha = 0.9f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        stringResource(R.string.numero_dossard, dossardAffiche),
+                        fontFamily = Moyen, fontSize = 14.sp,
+                        letterSpacing = 0.8.sp, color = Encre2,
                     )
                 }
             }
-        }
 
-        Spacer(Modifier.height(14.dp))
-
-        BoutonEnvoyer(pret = grimpeurFait && blocFait, grimpeurFait = grimpeurFait,
-                      couleur = couleur, onClick = onEnvoyer)
-
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            if (grimpeurFait) {
-                Text(
-                    stringResource(R.string.reset),
-                    fontFamily = Normal, fontSize = 14.sp, color = Encre2,
-                    modifier = Modifier.clickable(onClick = onEffacer).padding(10.dp),
-                )
-            } else {
-                Spacer(Modifier.height(34.dp))
-            }
-        }
-
-        if (historique.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(TraitAttente))
-            Spacer(Modifier.height(16.dp))
-            Journal(historique)
+
+            CarteEtape(
+                numero = "2",
+                etiquette = stringResource(R.string.block).uppercase(),
+                fait = blocFait,
+                active = grimpeurFait && !blocFait,
+                teinte = if (blocFait) couleur else null,
+                onClick = onScanBloc,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Le tag dans une pastille pleine : c'est LUI que le juge
+                    // vérifie, pas la phrase à côté.
+                    Text(
+                        blocAffiche.orEmpty(),
+                        fontFamily = Titre, fontSize = 32.sp, letterSpacing = (-0.5).sp,
+                        color = encreSur(teinteAffichee),
+                        modifier = Modifier
+                            .background(teinteAffichee, RoundedCornerShape(14.dp))
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                    if (circuitAffiche != null) {
+                        Spacer(Modifier.width(14.dp))
+                        Text(
+                            stringResource(R.string.circuit_x, circuitAffiche),
+                            fontFamily = Moyen, fontSize = 16.sp,
+                            color = teinteAffichee.copy(alpha = 0.9f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            BoutonEnvoyer(
+                pret = grimpeurFait && blocFait,
+                grimpeurFait = grimpeurFait,
+                couleur = couleur,
+                confirmation = confirmation,
+                onClick = { couleurValidee = couleur; onEnvoyer() },
+            )
+
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                if (grimpeurFait) {
+                    Text(
+                        stringResource(R.string.reset),
+                        fontFamily = Normal, fontSize = 14.sp, color = Encre2,
+                        modifier = Modifier.clickable(onClick = onEffacer).padding(10.dp),
+                    )
+                } else {
+                    Spacer(Modifier.height(34.dp))
+                }
+            }
+
+            if (historique.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(TraitAttente))
+                Spacer(Modifier.height(16.dp))
+                Journal(historique)
+            }
+
+            Spacer(Modifier.height(28.dp))
         }
 
-        Spacer(Modifier.height(28.dp))
+        // Le voile : la couleur du circuit passe sur tout l'écran et s'efface.
+        // Aucun `clickable` dessus — il ne capte donc aucun geste, et le juge peut
+        // relancer un scan sans attendre la fin.
+        if (confirmation != null) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        confirmation.couleur.copy(
+                            alpha = impulsion(confirmation.progression) * 0.13f,
+                        ),
+                    ),
+            )
+        }
     }
 }
+
+/**
+ * L'instant qui suit un envoi. `null` le reste du temps.
+ *
+ * @param couleur celle du circuit validé, figée au clic.
+ * @param progression 0 → 1 linéairement sur 700 ms.
+ * @param rebond 0 → 1 **avec dépassement** : c'est lui qui fait claquer la coche.
+ */
+private data class Confirmation(
+    val couleur: Color,
+    val progression: Float,
+    val rebond: Float,
+)
+
+/**
+ * Une impulsion : monte pendant `montee`, redescend sur tout le reste.
+ *
+ * Une décroissance simple aurait posé le voile à pleine intensité d'un seul
+ * coup — un flash. Là il arrive en 85 ms, ce que l'œil lit comme un mouvement
+ * et non comme une coupure de courant.
+ */
+private fun impulsion(p: Float, montee: Float = 0.12f): Float =
+    if (p <= montee) p / montee else 1f - (p - montee) / (1f - montee)
 
 // --- L'en-tête ---------------------------------------------------------------
 
@@ -395,10 +512,38 @@ private fun CarteEtape(
         label = "epaisseur",
     )
 
+    // L'atterrissage. La carte **encaisse** le scan : elle se tasse d'un cheveu
+    // puis revient en dépassant. Sans ce sursaut, les couleurs changeaient et
+    // rien ne se passait — le scan n'avait aucun poids.
+    val atterrissage = remember { Animatable(1f) }
+    var etaitFait by remember { mutableStateOf(fait) }
+    LaunchedEffect(fait) {
+        if (fait == etaitFait) return@LaunchedEffect
+        etaitFait = fait
+        // Seulement à l'arrivée. Un « Effacer » remet trois cartes à zéro d'un
+        // coup : les faire toutes rebondir ensemble serait du bruit.
+        if (fait) {
+            atterrissage.snapTo(0.96f)
+            atterrissage.animateTo(
+                targetValue = 1f,
+                animationSpec = spring(dampingRatio = 0.42f,
+                                       stiffness = Spring.StiffnessMediumLow),
+            )
+        }
+    }
+
+    // La carte remplie est plus haute que la carte vide. C'était un saut sec.
+    val hauteurMin by animateDpAsState(
+        targetValue = if (fait) 132.dp else 116.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "hauteurCarte",
+    )
+
     Box(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = if (fait) 132.dp else 116.dp)
+            .heightIn(min = hauteurMin)
+            .graphicsLayer { scaleX = atterrissage.value; scaleY = atterrissage.value }
             .clip(RoundedCornerShape(28.dp))
             .background(fond)
             .then(
@@ -454,23 +599,81 @@ private fun CarteEtape(
             }
             Spacer(Modifier.height(if (fait) 12.dp else 14.dp))
 
-            when {
-                fait -> contenu()
-                active -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.QrCodeScanner, contentDescription = null,
-                        tint = Encre, modifier = Modifier.size(28.dp),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(stringResource(R.string.toucher_pour_scanner),
-                         fontFamily = Moyen, fontSize = 21.sp, color = Encre)
+            // Le contenu ne se remplace pas, il ARRIVE : le nom du grimpeur
+            // monte à sa place pendant que la consigne s'efface. Les deux se
+            // croisent en 60 ms — assez pour voir le remplacement, pas assez
+            // pour l'attendre.
+            AnimatedContent(
+                targetState = when {
+                    fait -> EtatEtape.FAITE
+                    active -> EtatEtape.ACTIVE
+                    else -> EtatEtape.ATTENTE
+                },
+                transitionSpec = {
+                    (fadeIn(tween(200, delayMillis = 60)) +
+                        slideInVertically(
+                            animationSpec = spring(
+                                dampingRatio = 0.7f,
+                                stiffness = Spring.StiffnessMediumLow,
+                            ),
+                        ) { hauteur -> hauteur / 2 })
+                        .togetherWith(fadeOut(tween(110)))
+                },
+                label = "contenuEtape",
+            ) { etat ->
+                // ⚠️ Le `Column`. `AnimatedContent` empile ses enfants comme
+                // une `Box` : sans lui, le nom du grimpeur et son numéro de
+                // dossard — deux `Text` frères dans `contenu` — se
+                // superposaient au même endroit.
+                Column {
+                    when (etat) {
+                        EtatEtape.FAITE -> contenu()
+                        EtatEtape.ACTIVE -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.QrCodeScanner, contentDescription = null,
+                                tint = Encre, modifier = Modifier.size(28.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(stringResource(R.string.toucher_pour_scanner),
+                                 fontFamily = Moyen, fontSize = 21.sp, color = Encre)
+                        }
+                        EtatEtape.ATTENTE -> Text(stringResource(R.string.ensuite),
+                                                  fontFamily = Normal,
+                                                  fontSize = 21.sp, color = Encre3)
+                    }
                 }
-                else -> Text(stringResource(R.string.ensuite), fontFamily = Normal,
-                             fontSize = 21.sp, color = Encre3)
             }
         }
     }
 }
+
+/**
+ * La dernière valeur non nulle.
+ *
+ * ⚠️ Sans cela, la carte du bloc virait à la **tache blanche** pendant le fondu
+ * de sortie. `AnimatedContent` garde le contenu sortant à l'écran le temps de
+ * l'animation, et ce contenu est une lambda : il relit l'état courant à chaque
+ * image. Or l'état vient d'être remis à zéro — la pastille perdait donc son tag
+ * ET sa couleur, et se redessinait blanche et vide sous les yeux du juge.
+ *
+ * Ici elle s'efface en gardant « ZJ1 » et son jaune, ce qui est à la fois plus
+ * joli et plus honnête : c'est bien ça qu'on vient d'envoyer.
+ */
+@Composable
+private fun retenu(valeur: String?): String? {
+    // Volontairement PAS un `mutableStateOf` : écrire dans un état observable
+    // pendant la composition force un second passage pour rien. Ici l'écran est
+    // de toute façon recomposé quand `valeur` change — c'est ce changement même
+    // qui nous amène ici.
+    val memoire = remember { Memoire(valeur) }
+    if (valeur != null) memoire.valeur = valeur
+    return memoire.valeur
+}
+
+private class Memoire(var valeur: String?)
+
+/** Les trois états d'une étape. Une carte n'en a jamais deux à la fois. */
+private enum class EtatEtape { FAITE, ACTIVE, ATTENTE }
 
 // --- Étape 3 : envoyer -------------------------------------------------------
 
@@ -491,6 +694,7 @@ private fun BoutonEnvoyer(
     pret: Boolean,
     grimpeurFait: Boolean,
     couleur: Color,
+    confirmation: Confirmation?,
     onClick: () -> Unit,
 ) {
     val souffle = rememberInfiniteTransition(label = "souffle")
@@ -510,11 +714,25 @@ private fun BoutonEnvoyer(
         ),
         label = "lueur",
     )
+    // Pendant la confirmation, le bouton garde SA couleur — celle du circuit
+    // qui vient d'être validé — alors que le reste de l'écran s'est déjà remis
+    // à zéro (le ViewModel efface 500 ms après l'envoi, l'animation en dure
+    // 700). Sans cela, la coche apparaissait sur un bouton en train de blanchir.
+    val enVol = confirmation != null
+    val teinte = confirmation?.couleur ?: couleur
+
     val fond by animateColorAsState(
-        targetValue = if (pret) couleur else CarteAttente,
+        targetValue = if (pret || enVol) teinte else CarteAttente,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "fondBouton",
     )
+
+    // La lueur qui respirait s'embrase le temps de la validation : 8 dp de
+    // relief au repos, 48 dp au moment de l'impulsion.
+    val relief = if (confirmation != null)
+        8f + impulsion(confirmation.progression, 0.10f) * 40f else lueur
+    val ampleur = if (confirmation != null)
+        1f + impulsion(confirmation.progression, 0.10f) * 0.022f else echelle
 
     Box(
         Modifier
@@ -524,16 +742,16 @@ private fun BoutonEnvoyer(
             // avait pas d'espace en dessous à répartir, seulement la marge.
             .height(112.dp)
             .then(
-                if (pret) Modifier
-                    .graphicsLayer { scaleX = echelle; scaleY = echelle }
-                    .shadow(lueur.dp, RoundedCornerShape(28.dp),
-                            ambientColor = couleur, spotColor = couleur)
+                if (pret || enVol) Modifier
+                    .graphicsLayer { scaleX = ampleur; scaleY = ampleur }
+                    .shadow(relief.dp, RoundedCornerShape(28.dp),
+                            ambientColor = teinte, spotColor = teinte)
                 else Modifier,
             )
             .clip(RoundedCornerShape(28.dp))
             .background(fond)
             .then(
-                if (pret) Modifier
+                if (pret || enVol) Modifier
                 else Modifier.border(1.5.dp, TraitAttente, RoundedCornerShape(28.dp)),
             )
             .clickable(enabled = pret, onClick = onClick)
@@ -547,24 +765,49 @@ private fun BoutonEnvoyer(
                 Modifier
                     .size(19.dp)
                     .background(
-                        if (pret) encreSur(couleur).copy(alpha = 0.18f)
+                        if (pret || enVol) encreSur(teinte).copy(alpha = 0.18f)
                         else Color(0xFF1E252F),
                         CircleShape,
                     ),
                 contentAlignment = Alignment.Center,
             ) {
                 Text("3", fontFamily = Titre, fontSize = 11.sp,
-                     color = if (pret) encreSur(couleur) else Color(0xFF3C4652))
+                     color = if (pret || enVol) encreSur(teinte) else Color(0xFF3C4652))
             }
             Spacer(Modifier.width(9.dp))
             Text(
-                stringResource(if (pret) R.string.pret else R.string.send).uppercase(),
+                stringResource(
+                    when {
+                        enVol -> R.string.envoyee
+                        pret -> R.string.pret
+                        else -> R.string.send
+                    },
+                ).uppercase(),
                 fontFamily = Fort, fontSize = 11.sp, letterSpacing = 2.2.sp,
-                color = if (pret) encreSur(couleur).copy(alpha = 0.7f) else Encre3,
+                color = if (pret || enVol) encreSur(teinte).copy(alpha = 0.7f) else Encre3,
             )
         }
 
-        if (pret) {
+        if (confirmation != null) {
+            // La coche. Elle entre en dépassant sa taille — c'est ce que l'œil
+            // lit comme « c'est fait », là où un fondu se lit « ça charge ».
+            Icon(
+                Icons.Filled.Check, contentDescription = null,
+                tint = encreSur(teinte),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(60.dp)
+                    .graphicsLayer {
+                        scaleX = confirmation.rebond
+                        scaleY = confirmation.rebond
+                        alpha = (confirmation.rebond * 2.2f).coerceAtMost(1f) *
+                            // Elle s'efface sur les 150 dernières millisecondes,
+                            // en même temps que le bouton retourne au gris.
+                            (1f - (confirmation.progression - 0.78f) / 0.22f)
+                                .coerceIn(0f, 1f)
+                    },
+            )
+        } else if (pret) {
             Text(
                 stringResource(R.string.send).uppercase(),
                 fontFamily = Titre, fontSize = 30.sp, letterSpacing = 3.sp,
@@ -608,6 +851,23 @@ private fun BoutonEnvoyer(
  */
 @Composable
 private fun Journal(validations: List<Validation>) {
+    // L'arrivée de la ligne du haut.
+    //
+    // ⚠️ Elle n'est PAS pilotée par la confirmation du bouton, bien que les
+    // deux se déclenchent au même geste : la ligne est ajoutée au journal une
+    // image avant que la confirmation ne démarre, et elle apparaissait donc en
+    // clair le temps d'une image avant de repartir de zéro — un clignotement.
+    //
+    // Une `Animatable` recréée à 0 pour chaque nouvelle première ligne n'a pas
+    // ce défaut : la toute première image la lit déjà transparente.
+    val premiere = validations.firstOrNull()
+    val cle = premiere?.let { "${'$'}{it.heure}|${'$'}{it.grimpeur}|${'$'}{it.bloc}" }
+    val entree = remember(cle) { Animatable(0f) }
+    LaunchedEffect(cle) {
+        entree.animateTo(1f, spring(dampingRatio = 0.75f,
+                                    stiffness = Spring.StiffnessMediumLow))
+    }
+
     Column(Modifier.fillMaxWidth()) {
         Text(
             stringResource(R.string.dernieres_validations).uppercase(),
@@ -615,10 +875,21 @@ private fun Journal(validations: List<Validation>) {
             color = Encre2,
         )
         Spacer(Modifier.height(10.dp))
-        validations.forEach { v ->
+        validations.forEachIndexed { rang, v ->
             val couleur = couleurDeCircuit(v.couleur) ?: Encre2
             Row(
-                Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .then(
+                        // La ligne qu'on vient d'écrire descend se poser en
+                        // tête de liste. C'est le reçu : le geste laisse une
+                        // trace visible, pas seulement un bouton qui a clignoté.
+                        if (rang == 0) Modifier.graphicsLayer {
+                            alpha = entree.value
+                            translationY = (1f - entree.value) * -34f
+                        } else Modifier,
+                    )
+                    .padding(vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(8.dp).background(couleur, CircleShape))

@@ -173,6 +173,11 @@ class Server(
                         heure = heureCourte(),
                         couleur = mainViewModel.blocCouleur.value,
                     ))
+                    // L'ecran joue sa confirmation. Le toast « Valide » qui
+                    // faisait ce travail est retire : deux confirmations pour
+                    // un seul geste, dont une qui recouvre le bouton pendant
+                    // deux secondes -- exactement la ou le pouce va ensuite.
+                    mainViewModel.signalerValidation()
                     MessageJuge.VALIDE
                 } catch (e: Exception) {
                     // Disque plein, dossier inaccessible. On ne dit surtout pas
@@ -185,7 +190,8 @@ class Server(
             mainViewModel.setEnAttente(file.nombreEnAttente())
 
             withContext(Dispatchers.Main) {
-                toast(texteDe(message))
+                // Un succes ne fait plus de toast : l'ecran le montre.
+                if (message != MessageJuge.VALIDE) toast(texteDe(message))
                 if (DecisionEnvoi.doitReinitialiser(message)) {
                     CoroutineScope(Dispatchers.IO).launch {
                         delay(500)

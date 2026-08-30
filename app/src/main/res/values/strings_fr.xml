@@ -80,7 +80,12 @@
     <string name="apres_le_bloc">Après le bloc</string>
     <string name="apres_les_scans">Après les deux scans</string>
     <string name="pret">Prêt</string>
+    <!-- L'étiquette du bouton pendant les 700 ms de confirmation. -->
+    <string name="envoyee">Envoyée</string>
     <string name="menu">Menu</string>
     <string name="circuit_x">Circuit %1$s</string>
     <string name="numero_dossard">N° %1$s</string>
+    <!-- Le menu derriere le logo (refonte du 30/08). -->
+    <string name="menu_scans_detail">Tout ce que ce téléphone a scanné</string>
+    <string name="menu_reglages_detail">Nom du téléphone, serveur, saisie</string>
 </resources>

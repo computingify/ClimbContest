@@ -11,6 +11,13 @@
 
     <application
         android:networkSecurityConfig="@xml/network_security_config"
-        tools:replace="android:networkSecurityConfig" />
+        tools:replace="android:networkSecurityConfig">
+
+        <activity
+            android:name=".VitrineActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ClimbContest" />
+
+    </application>
 
 </manifest>
