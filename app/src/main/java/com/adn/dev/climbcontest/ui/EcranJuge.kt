@@ -111,6 +111,8 @@ fun EcranJuge(
     enAttente: Int,
     refusees: Int,
     historique: List<Validation>,
+    /** Un envoi demandé à la main est-il en train de partir ? */
+    envoiEnCours: Boolean,
     /**
      * Le nombre de réussites validées depuis le lancement.
      *
@@ -193,6 +195,7 @@ fun EcranJuge(
             Entete(
                 enAttente = enAttente,
                 refusees = refusees,
+                envoiEnCours = envoiEnCours,
                 serveurJoignable = serveurJoignable,
                 onToutEnvoyer = onToutEnvoyer,
                 onMenu = onMenu,
@@ -331,7 +334,7 @@ private fun impulsion(p: Float, montee: Float = 0.12f): Float =
 // --- L'en-tête ---------------------------------------------------------------
 
 /**
- * `ANNONAY`, l'état de l'envoi, et le menu.
+ * L'état de l'envoi, à gauche ; le voyant et le menu, à droite.
  *
  * ⚠️ La file est **dans** l'en-tête, et pas en bandeau au-dessus des cartes.
  * Posée en bandeau, elle poussait tout l'écran vers le bas dès qu'une réussite
@@ -339,27 +342,21 @@ private fun impulsion(p: Float, montee: Float = 0.12f): Float =
  * sous le pouce du juge pendant qu'il scannait.** Ici, elle apparaît et disparaît
  * sans rien déplacer.
  *
- * Le rangement se fait par la **proximité** : la pastille de file et le voyant
- * sont serrés l'un contre l'autre — ils disent tous deux « où en est l'envoi » —
- * et le logo-menu est séparé par un espace plus large. Pas de séparateur, pas de
- * cadre, et pourtant deux groupes lisibles.
+ * ⚠️ Le mot `ANNONAY` occupait la gauche. Il ne disait rien à personne : le juge
+ * sait dans quelle salle il est, et l'écran n'a qu'une seule application. La
+ * place qu'il prenait revient aux pastilles, qui en ont besoin — ce sont elles
+ * qu'on touche.
  */
 @Composable
 private fun Entete(
     enAttente: Int,
     refusees: Int,
+    envoiEnCours: Boolean,
     serveurJoignable: Boolean?,
     onToutEnvoyer: () -> Unit,
     onMenu: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            "ANNONAY",
-            fontFamily = Fort, fontSize = 13.sp, letterSpacing = 2.4.sp,
-            color = Encre2,
-        )
-        Spacer(Modifier.weight(1f))
-
         // Le rouge est réservé à ce qui demande une ACTION : une refusée ne
         // repartira pas seule, contrairement à une réussite en file.
         if (refusees > 0) {
@@ -372,15 +369,23 @@ private fun Entete(
         }
         if (enAttente > 0) {
             Pastille(
-                texte = stringResource(R.string.en_attente, enAttente),
+                // Pendant l'aller-retour, la pastille le DIT. Le compteur seul
+                // ne bougeait pas d'un pixel tant que le serveur n'avait pas
+                // répondu : le juge appuyait une deuxième fois, puis une
+                // troisième, puis renonçait.
+                texte = if (envoiEnCours) stringResource(R.string.envoi_en_cours)
+                        else stringResource(R.string.en_attente, enAttente),
                 couleur = Attention,
                 fleche = true,
+                travaille = envoiEnCours,
                 // Un appui force l'envoi immédiat : le geste de fin de
                 // compétition, avant d'éteindre les téléphones.
                 onClick = onToutEnvoyer,
             )
             Spacer(Modifier.width(10.dp))
         }
+
+        Spacer(Modifier.weight(1f))
 
         Voyant(serveurJoignable)
         Spacer(Modifier.width(18.dp))
@@ -400,22 +405,45 @@ private fun Pastille(
     texte: String,
     couleur: Color,
     fleche: Boolean = false,
+    travaille: Boolean = false,
     onClick: () -> Unit,
 ) {
+    // La flèche monte et revient tant que l'envoi est en vol. C'est le même
+    // signe, animé : rien de nouveau à comprendre.
+    val vol = rememberInfiniteTransition(label = "vol")
+    val montee by vol.animateFloat(
+        initialValue = 0f, targetValue = -4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(620, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "montee",
+    )
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
+            // ⚠️ 44 dp de haut, et non la hauteur du texte. La pastille faisait
+            // 26 dp : sous les 48 dp recommandés, et surtout sous ce qu'un
+            // pouce vise à côté d'un logo. Le fond, lui, ne grandit pas — c'est
+            // la ZONE qui grandit, pas le dessin.
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(999.dp))
-            .background(couleur.copy(alpha = 0.14f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(vertical = 9.dp)
+            .clip(RoundedCornerShape(999.dp))
+            .background(couleur.copy(alpha = if (travaille) 0.24f else 0.14f))
+            .padding(horizontal = 11.dp, vertical = 5.dp),
     ) {
         if (fleche) {
             // La flèche dit que la pastille est actionnable. Sans elle, un
             // compteur ressemble à un simple affichage.
             Icon(
                 Icons.Filled.ArrowUpward, contentDescription = null,
-                tint = couleur, modifier = Modifier.size(13.dp),
+                tint = couleur,
+                modifier = Modifier
+                    .size(13.dp)
+                    .graphicsLayer { if (travaille) translationY = montee },
             )
             Spacer(Modifier.width(4.dp))
         }

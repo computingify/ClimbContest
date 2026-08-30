@@ -44,6 +44,17 @@
     <string name="file_vide">Tout est déjà envoyé</string>
     <string name="file_envoyee">Toutes les réussites sont envoyées</string>
     <string name="file_reste">%1$d réussite(s) encore en attente</string>
+    <!-- Les deux cas que « il en reste N » confondait : le serveur a repondu
+         non, et on n'a pas encore le droit de reessayer. -->
+    <string name="file_serveur_muet">Le serveur ne répond pas — %1$d en attente</string>
+    <string name="file_trop_tot">Réessai dans un instant — %1$d en attente</string>
+    <string name="envoi_en_cours">Envoi…</string>
+    <string name="menu_en_attente_detail">Voir lesquelles ne sont pas parties</string>
+    <!-- Le menu tient sur un ecran : ses sous-titres font UNE ligne. La
+         version longue de `reglages_refus_detail` explique la regle, ce qui a
+         sa place dans les reglages et pas dans une liste de gestes. -->
+    <string name="menu_refus_detail">Le serveur ne connaissait pas le dossard</string>
+    <string name="menu_envoyer_detail">Forcer l\'envoi tout de suite</string>
     <string name="en_attente">%1$d en attente</string>
     <string name="tout_envoyer">Tout envoyer</string>
     <string name="rien_a_envoyer">Scannez le grimpeur puis le bloc</string>

@@ -66,6 +66,24 @@ class MainViewModel : ViewModel() {
         _validations.value++
     }
 
+    /**
+     * Un envoi demande a la main est-il en cours ?
+     *
+     * Sans ce drapeau, appuyer sur « 3 en attente » ne produisait RIEN de
+     * visible pendant tout l'aller-retour reseau -- jusqu'a plusieurs secondes
+     * sur le wifi d'une salle pleine. Le juge appuyait deux fois, trois fois,
+     * puis concluait que le bouton ne marchait pas.
+     *
+     * Il ne couvre que l'envoi force : la boucle de fond, elle, ne doit rien
+     * afficher, sinon la pastille clignoterait toute la journee.
+     */
+    private val _envoiEnCours = MutableStateFlow(false)
+    val envoiEnCours: StateFlow<Boolean> = _envoiEnCours
+
+    fun setEnvoiEnCours(enCours: Boolean) {
+        _envoiEnCours.value = enCours
+    }
+
     private val _autoEval = false
     var autoEval = _autoEval
 

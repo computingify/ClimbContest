@@ -75,9 +75,22 @@ class PolitiqueEnvoiTest {
     }
 
     @Test
-    fun `forcer ne contourne PAS le retrait`() {
+    fun `forcer garde un plancher de deux secondes`() {
         // Sinon appuyer en boucle sur un serveur eteint noierait le telephone.
         assertFalse(PolitiqueEnvoi.doitEnvoyer(10, 500, echecsConsecutifs = 3, forcer = true))
+    }
+
+    @Test
+    fun `forcer rabat le retrait a son premier palier`() {
+        // Cinq echecs, donc trente-deux secondes de retrait pour la boucle de
+        // fond. Le juge, lui, appuie sur « 3 en attente » : ca doit PARTIR.
+        //
+        // C'est le defaut signale le 30/08 : pendant tout le retrait, la
+        // pastille ne tentait rien et affichait « il en reste 3 ». Elle
+        // repondait en ayant l'air d'avoir echoue, sans avoir essaye.
+        assertTrue(PolitiqueEnvoi.attenteApresEchec(5) > 3_000)
+        assertFalse(PolitiqueEnvoi.doitEnvoyer(10, 3_000, echecsConsecutifs = 5))
+        assertTrue(PolitiqueEnvoi.doitEnvoyer(10, 3_000, echecsConsecutifs = 5, forcer = true))
     }
 
     @Test

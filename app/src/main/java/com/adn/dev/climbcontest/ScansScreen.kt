@@ -72,9 +72,17 @@ import com.adn.dev.climbcontest.ui.theme.Vert
 fun ScansScreen(
     scans: List<ScanJournalise>,
     catalogue: Catalogue,
+    /**
+     * La liste s'ouvre-t-elle déjà filtrée sur ce qui n'est pas arrivé ?
+     *
+     * `true` quand on vient du menu par « N en attente » : la question posée
+     * était « lesquelles ne sont pas parties ? », l'écran doit y répondre tout
+     * de suite. Le filtre reste visible et se retire d'un doigt.
+     */
+    filtreInitial: Boolean = false,
     onBack: () -> Unit,
 ) {
-    var seulementNonArrives by remember { mutableStateOf(false) }
+    var seulementNonArrives by remember { mutableStateOf(filtreInitial) }
 
     BackHandler { onBack() }
 
