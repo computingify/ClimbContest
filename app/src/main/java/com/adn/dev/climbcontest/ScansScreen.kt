@@ -49,6 +49,7 @@ import com.adn.dev.climbcontest.ui.theme.Alerte
 import com.adn.dev.climbcontest.ui.theme.Attention
 import com.adn.dev.climbcontest.ui.theme.CarteFaite
 import com.adn.dev.climbcontest.ui.theme.Encre
+import com.adn.dev.climbcontest.ui.theme.Fond
 import com.adn.dev.climbcontest.ui.theme.Encre2
 import com.adn.dev.climbcontest.ui.theme.Vert
 
@@ -91,7 +92,7 @@ fun ScansScreen(
     ) {
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = CarteFaite,
+                containerColor = Fond,
                 titleContentColor = Encre,
             ),
             navigationIcon = {
@@ -178,7 +179,7 @@ private fun LigneScan(scan: ScanJournalise, catalogue: Catalogue) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .background(CarteFaite, RoundedCornerShape(12.dp))
+            .background(CarteFaite, RoundedCornerShape(20.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -25,6 +25,7 @@ import com.adn.dev.climbcontest.ui.theme.Alerte
 import com.adn.dev.climbcontest.ui.theme.Attention
 import com.adn.dev.climbcontest.ui.theme.CarteFaite
 import com.adn.dev.climbcontest.ui.theme.Encre
+import com.adn.dev.climbcontest.ui.theme.Fond
 import com.adn.dev.climbcontest.ui.theme.Encre2
 import com.adn.dev.climbcontest.ui.theme.Vert
 import com.adn.dev.climbcontest.ui.theme.CarteAttente
@@ -74,7 +75,7 @@ fun SettingsScreen(
     ) {
         TopAppBar(
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = CarteFaite,
+                containerColor = Fond,
                 titleContentColor = Encre,
             ),
             navigationIcon = {
@@ -294,7 +295,7 @@ private fun Section(titre: String, contenu: @Composable ColumnScope.() -> Unit) 
         modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
     )
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(24.dp),
         color = CarteFaite,
         modifier = Modifier.fillMaxWidth(),
     ) {
