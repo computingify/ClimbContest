@@ -319,6 +319,21 @@ class StockageFichierTest {
     }
 
     @Test
+    fun `un fichier tronque sans saut de ligne final est repare, pas melange`() {
+        // Le scenario d'une coupure en pleine ecriture : la derniere ligne est
+        // la, mais pas son saut de ligne. Sans le prefixe ajoute par
+        // `ajouter`, la reussite suivante se COLLERAIT a elle -- deux
+        // reussites fusionnees en une ligne illisible pour la relecture.
+        val cible = File(dossierTemporaire.newFolder(), "f.jsonl")
+        cible.writeText("""{"ref":"coupee"}""")   // pas de \n final
+        StockageFichier(cible).ajouter("""{"ref":"suivante"}""")
+        assertEquals(
+            listOf("""{"ref":"coupee"}""", """{"ref":"suivante"}"""),
+            StockageFichier(cible).lire(),
+        )
+    }
+
+    @Test
     fun `les accents traversent l'ecriture et la relecture`() {
         val s = StockageFichier(File(dossierTemporaire.newFolder(), "f.txt"))
         s.ajouter("réussite validée — Noë")
