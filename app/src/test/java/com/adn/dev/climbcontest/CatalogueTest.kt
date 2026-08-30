@@ -209,6 +209,72 @@ class CatalogueTest {
         assertFalse(d.doitRafraichir(versionServeur = null, maintenantMs = 1000,
                                      dernierRafraichissementMs = 1000))
     }
+
+    // --- La couleur du circuit (refonte visuelle) ---------------------------
+    //
+    // L'ecran prend la couleur du bloc scanne. Ce n'est pas de la decoration :
+    // un juge verifie d'un coup d'oeil qu'il est sur le bon circuit, ce que le
+    // tag seul ne dit pas a quelqu'un qui ne connait pas la convention par
+    // coeur.
+
+    @Test
+    fun `la couleur du bloc est lue depuis le serveur`() {
+        val corps = """
+            {"version": 1, "participants": [],
+             "blocs": [{"tag": "ZJ1", "couleur": "Jaune"},
+                       {"tag": "ZV3", "couleur": "Vert"}]}
+        """.trimIndent()
+
+        val catalogue = Catalogue.depuisReponseServeur(corps)!!
+
+        assertEquals("Jaune", catalogue.couleurDuBloc("ZJ1"))
+        assertEquals("Vert", catalogue.couleurDuBloc("zv3"))
+    }
+
+    @Test
+    fun `un bloc sans couleur reste parfaitement utilisable`() {
+        val corps = """{"version": 1, "participants": [], "blocs": [{"tag": "ZJ1"}]}"""
+
+        val catalogue = Catalogue.depuisReponseServeur(corps)!!
+
+        assertEquals("le bloc existe toujours", "ZJ1", catalogue.bloc("ZJ1"))
+        assertNull(catalogue.couleurDuBloc("ZJ1"))
+    }
+
+    @Test
+    fun `la couleur survit a l'aller-retour par le disque`() {
+        val corps = """
+            {"version": 4, "participants": [{"dossard": 1, "nom": "Dupont"}],
+             "blocs": [{"tag": "ZM9", "couleur": "Mauve"}]}
+        """.trimIndent()
+        val fichier = File(dossierTemporaire.newFolder(), "catalogue.json")
+        fichier.writeText(Catalogue.depuisReponseServeur(corps)!!.versJson())
+
+        val relu = Catalogue.depuisDisque(fichier)!!
+
+        assertEquals("Mauve", relu.couleurDuBloc("ZM9"))
+        assertEquals(4, relu.version)
+    }
+
+    /**
+     * ⚠️ Les couleurs sont arrivees APRES. Un telephone qui prend la mise a
+     * jour garde un catalogue range par l'ancienne version, sans le champ. Sans
+     * lecture tolerante, la relecture echouait et le catalogue entier etait
+     * jete -- donc chaque scan repassait par le reseau, en silence.
+     */
+    @Test
+    fun `un catalogue range AVANT les couleurs reste lisible`() {
+        val fichier = File(dossierTemporaire.newFolder(), "ancien.json")
+        fichier.writeText(
+            """{"version": 2, "participants": {"1": "Dupont"}, "blocs": {"ZJ1": "ZJ1"}}"""
+        )
+
+        val relu = Catalogue.depuisDisque(fichier)
+
+        assertNotNull("un catalogue sans couleurs ne doit pas etre jete", relu)
+        assertEquals("Dupont", relu!!.grimpeur("1"))
+        assertNull(relu.couleurDuBloc("ZJ1"))
+    }
 }
 
 /**
@@ -252,4 +318,5 @@ class CatalogueContratReelTest {
         val brut = catalogueDeLaVm().length
         assertTrue("catalogue brut de $brut octets", brut < 40_000)
     }
+
 }

@@ -10,6 +10,14 @@ data class Validation(
     val grimpeur: String,
     val bloc: String,
     val heure: String,
+    /**
+     * La couleur du circuit, telle que le serveur la nomme — « Jaune », « Vert »…
+     *
+     * Le journal l'affiche en pastille : d'un coup d'oeil, le juge voit sur
+     * quels circuits il a validé ces dernières minutes. `null` pour un bloc dont
+     * le catalogue ne connaît pas la couleur, et la ligne reste lisible.
+     */
+    val couleur: String? = null,
 )
 
 
@@ -26,6 +34,21 @@ class MainViewModel : ViewModel() {
 
     private val _blocName = MutableStateFlow<String?>(null)
     val blocName: StateFlow<String?> = _blocName
+
+    /**
+     * La couleur du circuit du bloc scanné.
+     *
+     * C'est elle qui donne sa couleur à l'écran : la carte du bloc et le bouton
+     * « Envoyer » la prennent. Ce n'est pas décoratif — un juge vérifie ainsi
+     * qu'il est sur le bon circuit, ce que le tag seul (« ZJ1 ») ne dit pas à
+     * quelqu'un qui ne connaît pas la convention de nommage par cœur.
+     */
+    private val _blocCouleur = MutableStateFlow<String?>(null)
+    val blocCouleur: StateFlow<String?> = _blocCouleur
+
+    fun setBlocCouleur(couleur: String?) {
+        _blocCouleur.value = couleur
+    }
 
     private val _autoEval = false
     var autoEval = _autoEval
@@ -136,5 +159,6 @@ class MainViewModel : ViewModel() {
         }
         _blocId.value = null
         _blocName.value = null
+        _blocCouleur.value = null
     }
 }

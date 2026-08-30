@@ -102,7 +102,7 @@ class Server(
         }
 
         if (libelleLocal != null) {
-            afficher(scanType, libelleLocal)
+            afficher(scanType, libelleLocal, catalogue.couleurDuBloc(scannedValue))
             return MessageScan.ACCEPTE
         }
 
@@ -113,7 +113,11 @@ class Server(
             else -> return MessageScan.REFUSE
         }
         if (resultat is ApiResult.Succes && resultat.libelle.isNotEmpty()) {
-            afficher(scanType, resultat.libelle)
+            // Le catalogue vient d'etre rafraichi juste apres : la couleur
+            // arrivera au prochain scan. Un bloc sans couleur reste utilisable,
+            // l'ecran garde simplement sa teinte neutre.
+            afficher(scanType, resultat.libelle, depotCatalogue.courant()
+                .couleurDuBloc(scannedValue))
         }
         if (resultat is ApiResult.Echec) println("ClimbContest: ${resultat.message}")
 
@@ -123,12 +127,15 @@ class Server(
         return DecisionEnvoi.apresScan(resultat)
     }
 
-    private fun afficher(scanType: String, libelle: String) {
+    private fun afficher(scanType: String, libelle: String, couleur: String? = null) {
         when (scanType) {
             // Cote grimpeur, c'est son NOM : ce que le juge lit pour confirmer
             // qu'il a scanne la bonne personne.
             "climber" -> mainViewModel.setClimberName(libelle)
-            "bloc" -> mainViewModel.setBlocName(libelle)
+            "bloc" -> {
+                mainViewModel.setBlocName(libelle)
+                mainViewModel.setBlocCouleur(couleur)
+            }
         }
     }
 
@@ -164,6 +171,7 @@ class Server(
                         grimpeur = mainViewModel.climberName.value ?: "dossard $dossard",
                         bloc = mainViewModel.blocName.value ?: bloc!!,
                         heure = heureCourte(),
+                        couleur = mainViewModel.blocCouleur.value,
                     ))
                     MessageJuge.VALIDE
                 } catch (e: Exception) {
