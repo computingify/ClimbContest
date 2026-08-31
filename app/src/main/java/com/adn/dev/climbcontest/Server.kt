@@ -41,7 +41,7 @@ class Server(
     private val expediteur = Expediteur(file, api) { depotIdentite.courante() }
 
     @Volatile private var dernierEnvoiMs = 0L
-    @Volatile private var dernierRafraichissementMs = 0L
+    @Volatile private var finDuDernierEssaiCatalogueMs = 0L
     @Volatile private var dernierContactMs = 0L
     @Volatile private var versionServeurConnue: Int? = null
 
@@ -113,16 +113,19 @@ class Server(
             else -> return MessageScan.REFUSE
         }
         if (resultat is ApiResult.Succes && resultat.libelle.isNotEmpty()) {
-            // Le catalogue vient d'etre rafraichi juste apres : la couleur
-            // arrivera au prochain scan. Un bloc sans couleur reste utilisable,
-            // l'ecran garde simplement sa teinte neutre.
+            // Le catalogue est demande juste apres, mais il arrive APRES ce
+            // scan : la couleur du circuit sera la au scan suivant. Un bloc
+            // sans couleur reste utilisable, l'ecran garde sa teinte neutre.
             afficher(scanType, resultat.libelle, depotCatalogue.courant()
                 .couleurDuBloc(scannedValue))
         }
         if (resultat is ApiResult.Echec) println("ClimbContest: ${resultat.message}")
 
-        // Un QR inconnu est le signal le plus direct qu'on a du retard.
-        rafraichirCatalogue()
+        // Un QR inconnu est le signal le plus direct qu'on a du retard -- mais
+        // ce n'est pas au juge de payer le telechargement. On SIGNALE, et la
+        // boucle de fond s'en charge : l'ecran s'affiche maintenant, au lieu
+        // d'attendre un second aller-retour de quinze kilo-octets.
+        depotCatalogue.signalerQrInconnu()
 
         return DecisionEnvoi.apresScan(resultat)
     }
@@ -299,7 +302,7 @@ class Server(
     }
 
     private suspend fun verifierPresenceSiNecessaire() {
-        val dernier = maxOf(dernierContactMs, dernierEnvoiMs, dernierRafraichissementMs)
+        val dernier = maxOf(dernierContactMs, dernierEnvoiMs, finDuDernierEssaiCatalogueMs)
         if (System.currentTimeMillis() - dernier < PERIODE_PRESENCE_MS) return
         verifierPresence()
     }
@@ -328,6 +331,16 @@ class Server(
      *
      * `suivreLaPresence` tourne sous `repeatOnLifecycle`, donc sur le fil
      * principal : l'appel reseau doit explicitement partir ailleurs.
+     */
+    /**
+     * ⚠️ Ce chemin ne passe PAS par `doitRafraichir`, et c'est voulu : il sert
+     * le VOYANT, pas le catalogue. Un sondage qui se tairait parce que le
+     * catalogue est à jour rendrait le voyant menteur.
+     *
+     * Conséquence à connaître : au premier plan, un rafraîchissement part de
+     * toute façon toutes les [PERIODE_PRESENCE_MS], ce qui **plafonne de fait
+     * le retrait après échec** à cette période. Vingt-cinq téléphones font
+     * alors moins d'une requête par seconde à eux tous — le rythme voulu.
      */
     private suspend fun verifierPresence() {
         dernierContactMs = System.currentTimeMillis()
@@ -366,23 +379,32 @@ class Server(
         val doit = depotCatalogue.doitRafraichir(
             versionServeur = versionServeurConnue,
             maintenantMs = System.currentTimeMillis(),
-            dernierRafraichissementMs = dernierRafraichissementMs,
+            finDuDernierEssaiMs = finDuDernierEssaiCatalogueMs,
         )
         if (doit) rafraichirCatalogue()
     }
 
     private fun rafraichirCatalogue() {
-        dernierRafraichissementMs = System.currentTimeMillis()
+        // Ce que ce telechargement va couvrir : lu AVANT de partir, pour ne pas
+        // effacer un QR inconnu scanne pendant qu'il est en vol.
+        val vus = depotCatalogue.qrInconnusVus()
         val version = depotCatalogue.courant().version.takeIf { it > 0 }
-        when (val r = api.telechargerCatalogue(version)) {
+        val r = api.telechargerCatalogue(version)
+        // ⚠️ APRES l'appel, pas avant. Un appel qui expire coute dix secondes :
+        // horodate au depart, un retrait de deux ou quatre secondes serait deja
+        // ecoule au moment de le tester, et ne freinerait rien.
+        finDuDernierEssaiCatalogueMs = System.currentTimeMillis()
+        when (r) {
             is ResultatCatalogue.Recu -> {
                 depotCatalogue.enregistrer(r.catalogue)
                 versionServeurConnue = r.catalogue.version
+                depotCatalogue.noterSucces(vus)
                 mainViewModel.setServeurJoignable(true)
             }
             // 304 : rien n'a bouge. ~150 octets, et c'est le cas le plus frequent.
             is ResultatCatalogue.DejaAJour -> {
                 versionServeurConnue = version
+                depotCatalogue.noterSucces(vus)
                 mainViewModel.setServeurJoignable(true)
             }
             // Tout echec eteint le voyant, reseau ou non. Un `401` sur une cle
@@ -391,6 +413,7 @@ class Server(
             // va bien » serait un mensonge. La distinction reste au journal,
             // pour celui qui diagnostique.
             is ResultatCatalogue.Echec -> {
+                depotCatalogue.noterEchec()
                 println("ClimbContest: ${r.message} (reseau=${r.reseau})")
                 mainViewModel.setServeurJoignable(false)
             }

@@ -161,8 +161,78 @@ class DepotCatalogue(private val fichier: File) {
         provisoire.renameTo(fichier)
     }
 
+    // --- Le rythme des essais ------------------------------------------------
+    //
+    // ⚠️ C'est ici que vivait le pire défaut de cette classe, et il ne demandait
+    // AUCUNE panne pour se déclencher.
+    //
+    // `doitRafraichir` répondait « oui » sans condition de temps dès que le
+    // catalogue était vide. Or un catalogue peut être légitimement vide : la
+    // compétition est créée le matin, les participants ne sont pas encore
+    // saisis. Le téléchargement RÉUSSIT, rend un catalogue vide, et la
+    // condition reste vraie. La boucle de fond tourne toutes les secondes :
+    // vingt-cinq téléphones tapaient donc une fois par seconde chacun sur un
+    // serveur en parfaite santé, pendant tout le briefing.
+    //
+    // Deux garde-fous, et il faut les deux :
+    //
+    // - un **plancher** qui vaut quelle que soit la raison, y compris les plus
+    //   pressantes — c'est lui qui couvre le cas ci-dessus, où rien n'échoue ;
+    // - un **retrait après échec**, qui couvre la panne : le serveur est à
+    //   genoux, insister l'enfonce.
+
+    private var echecs = 0
+
     /**
-     * Faut-il retélécharger ?
+     * Combien de QR inconnus signalés, et combien étaient connus au début du
+     * dernier téléchargement réussi.
+     *
+     * Deux compteurs et non un booléen, pour une raison précise : un QR peut
+     * être scanné PENDANT un téléchargement. Un booléen remis à `false` à la
+     * fin effacerait ce signal-là sans l'avoir servi, et le participant
+     * inscrit dix minutes plus tôt attendrait le filet des cinq minutes.
+     */
+    private var qrInconnus = 0L
+    private var qrInconnusServis = 0L
+
+    /** Un QR absent du catalogue : le signal le plus direct qu'on a du retard. */
+    @Synchronized
+    fun signalerQrInconnu() {
+        qrInconnus++
+    }
+
+    /** Ce qu'un téléchargement qui démarre maintenant va couvrir. */
+    @Synchronized
+    fun qrInconnusVus(): Long = qrInconnus
+
+    @Synchronized
+    fun noterEchec() {
+        echecs++
+    }
+
+    /**
+     * [vus] est ce que [qrInconnusVus] rendait au DÉBUT de ce téléchargement.
+     *
+     * `maxOf` et non une affectation : deux téléchargements peuvent se
+     * chevaucher — la boucle de fond et le sondage de présence tournent dans
+     * des coroutines distinctes. Si le plus ANCIEN finit en dernier, une
+     * affectation ferait reculer le compteur. L'effet serait bénin (un
+     * rafraîchissement de trop, jamais un de moins), mais un compteur qui
+     * recule est le genre de bizarrerie qu'on met une heure à comprendre six
+     * mois plus tard.
+     */
+    @Synchronized
+    fun noterSucces(vus: Long) {
+        echecs = 0
+        qrInconnusServis = maxOf(qrInconnusServis, vus)
+    }
+
+    /** Pour les tests et le journal : combien d'échecs consécutifs. */
+    @get:Synchronized
+    val echecsConsecutifs: Int get() = echecs
+
+    /**
+     * Faut-il retélécharger, et a-t-on le droit de le faire maintenant ?
      *
      * Quatre déclencheurs, chacun pour une raison distincte :
      *
@@ -172,23 +242,43 @@ class DepotCatalogue(private val fichier: File) {
      * | version du serveur ≠ la nôtre | connue gratuitement, elle voyage dans la réponse de chaque lot |
      * | un QR est inconnu localement | le signal le plus direct qu'on a du retard |
      * | plus de [PERIODE_MS] écoulées | filet, pour un téléphone qui n'envoie rien |
+     *
+     * …mais aucun ne passe avant [PLANCHER_MS], ni avant le retrait dû aux
+     * échecs. Un déclencheur dit **s'il y a lieu** de retélécharger ; il ne dit
+     * pas à quel **rythme** insister, et c'est le rythme, seul, qui protège le
+     * wifi de la salle.
+     *
+     * ⚠️ [finDuDernierEssaiMs] est la FIN de la dernière tentative, pas son
+     * début. Un appel qui expire coûte dix secondes (`ClimbContestApi`) : mesuré
+     * depuis le début, un retrait de deux ou quatre secondes serait déjà écoulé
+     * quand on le teste, et ne freinerait rien.
      */
+    @Synchronized
     fun doitRafraichir(
         versionServeur: Int? = null,
-        qrInconnu: Boolean = false,
         maintenantMs: Long,
-        dernierRafraichissementMs: Long,
-    ): Boolean = when {
-        courant.estVide -> true
-        qrInconnu -> true
-        versionServeur != null && versionServeur != courant.version -> true
-        maintenantMs - dernierRafraichissementMs >= PERIODE_MS -> true
-        else -> false
+        finDuDernierEssaiMs: Long,
+    ): Boolean {
+        val depuis = maintenantMs - finDuDernierEssaiMs
+        if (depuis < maxOf(PLANCHER_MS, PolitiqueEnvoi.attenteApresEchec(echecs))) return false
+        return courant.estVide ||
+            qrInconnus > qrInconnusServis ||
+            (versionServeur != null && versionServeur != courant.version) ||
+            depuis >= PERIODE_MS
     }
 
     companion object {
         /** Cinq minutes. Un filet, pas le mécanisme principal. */
         const val PERIODE_MS = 5 * 60 * 1000L
+
+        /**
+         * Le temps minimal entre deux tentatives, quelle que soit l'urgence.
+         *
+         * Cinq secondes : le juge ne les sent pas — quand un QR lui est inconnu,
+         * le repli réseau lui a déjà rendu le nom — et vingt-cinq téléphones
+         * qui insistent tombent de vingt-cinq requêtes par seconde à cinq.
+         */
+        const val PLANCHER_MS = 5_000L
         const val FICHIER = "catalogue.json"
     }
 }

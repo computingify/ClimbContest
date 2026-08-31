@@ -161,18 +161,39 @@ class CatalogueTest {
         return d
     }
 
+    /** Le plancher écoulé : on teste les DÉCLENCHEURS, pas le rythme. */
+    private val APRES_LE_PLANCHER = DepotCatalogue.PLANCHER_MS
+
     @Test
-    fun `un catalogue vide doit toujours etre rafraichi`() {
+    fun `un catalogue vide declenche un rafraichissement`() {
         val d = DepotCatalogue(File(dossierTemporaire.newFolder(), "cat.json"))
         d.charger()
-        assertTrue(d.doitRafraichir(maintenantMs = 0, dernierRafraichissementMs = 0))
+        assertTrue(d.doitRafraichir(maintenantMs = APRES_LE_PLANCHER,
+                                    finDuDernierEssaiMs = 0))
+    }
+
+    @Test
+    fun `un catalogue vide ne vaut PAS une requete par seconde`() {
+        // ⚠️ Le defaut le plus couteux de cette classe, et il ne demandait
+        // aucune panne : une competition creee le matin n'a pas encore ses
+        // participants. Le telechargement REUSSIT et rend un catalogue vide,
+        // donc la condition restait vraie -- vingt-cinq telephones tapaient une
+        // fois par seconde sur un serveur en parfaite sante.
+        val d = DepotCatalogue(File(dossierTemporaire.newFolder(), "cat.json"))
+        d.charger()
+        assertFalse("une seconde apres, on n'y retourne pas",
+            d.doitRafraichir(maintenantMs = 1_000, finDuDernierEssaiMs = 0))
+        assertTrue("passe le plancher, oui",
+            d.doitRafraichir(maintenantMs = DepotCatalogue.PLANCHER_MS,
+                             finDuDernierEssaiMs = 0))
     }
 
     @Test
     fun `rien a faire si tout est a jour`() {
         val d = depotAvecCatalogue()
-        assertFalse(d.doitRafraichir(versionServeur = 7, maintenantMs = 1000,
-                                     dernierRafraichissementMs = 1000))
+        assertFalse(d.doitRafraichir(versionServeur = 7,
+                                     maintenantMs = APRES_LE_PLANCHER,
+                                     finDuDernierEssaiMs = 0))
     }
 
     @Test
@@ -180,15 +201,45 @@ class CatalogueTest {
         // Elle voyage GRATUITEMENT dans la reponse de chaque lot : c'est ce qui
         // fait voir un participant ajoute a 14 h en quelques secondes.
         val d = depotAvecCatalogue()
-        assertTrue(d.doitRafraichir(versionServeur = 8, maintenantMs = 1000,
-                                    dernierRafraichissementMs = 1000))
+        assertTrue(d.doitRafraichir(versionServeur = 8,
+                                    maintenantMs = APRES_LE_PLANCHER,
+                                    finDuDernierEssaiMs = 0))
     }
 
     @Test
     fun `un qr inconnu declenche un rafraichissement`() {
         val d = depotAvecCatalogue()
-        assertTrue(d.doitRafraichir(qrInconnu = true, versionServeur = 7,
-                                    maintenantMs = 1000, dernierRafraichissementMs = 1000))
+        d.signalerQrInconnu()
+        assertTrue(d.doitRafraichir(versionServeur = 7,
+                                    maintenantMs = APRES_LE_PLANCHER,
+                                    finDuDernierEssaiMs = 0))
+    }
+
+    @Test
+    fun `un qr inconnu scanne PENDANT un telechargement n'est pas perdu`() {
+        // Le telechargement part, un QR inconnu arrive avant qu'il revienne.
+        // Avec un simple booleen remis a false a la fin, ce signal-la serait
+        // efface sans avoir servi, et le participant inscrit dix minutes plus
+        // tot attendrait le filet des cinq minutes.
+        val d = depotAvecCatalogue()
+        d.signalerQrInconnu()
+        val vus = d.qrInconnusVus()          // ce que le telechargement va couvrir
+        d.signalerQrInconnu()                // arrive pendant qu'il est en vol
+        d.noterSucces(vus)
+        assertTrue("le second QR doit encore reclamer un rafraichissement",
+            d.doitRafraichir(versionServeur = 7,
+                             maintenantMs = APRES_LE_PLANCHER,
+                             finDuDernierEssaiMs = 0))
+    }
+
+    @Test
+    fun `un qr inconnu servi ne redeclenche plus rien`() {
+        val d = depotAvecCatalogue()
+        d.signalerQrInconnu()
+        d.noterSucces(d.qrInconnusVus())
+        assertFalse(d.doitRafraichir(versionServeur = 7,
+                                     maintenantMs = APRES_LE_PLANCHER,
+                                     finDuDernierEssaiMs = 0))
     }
 
     @Test
@@ -196,18 +247,57 @@ class CatalogueTest {
         val d = depotAvecCatalogue()
         assertFalse("juste avant l'echeance",
             d.doitRafraichir(maintenantMs = DepotCatalogue.PERIODE_MS - 1,
-                             dernierRafraichissementMs = 0))
+                             finDuDernierEssaiMs = 0))
         assertTrue("a l'echeance",
             d.doitRafraichir(maintenantMs = DepotCatalogue.PERIODE_MS,
-                             dernierRafraichissementMs = 0))
+                             finDuDernierEssaiMs = 0))
     }
 
     @Test
     fun `une version serveur inconnue ne declenche rien a elle seule`() {
         // Tant qu'on n'a pas parle au serveur, on n'invente pas de retard.
         val d = depotAvecCatalogue()
-        assertFalse(d.doitRafraichir(versionServeur = null, maintenantMs = 1000,
-                                     dernierRafraichissementMs = 1000))
+        assertFalse(d.doitRafraichir(versionServeur = null,
+                                     maintenantMs = APRES_LE_PLANCHER,
+                                     finDuDernierEssaiMs = 0))
+    }
+
+    // --- Le retrait apres echec ---------------------------------------------
+
+    @Test
+    fun `apres des echecs, on espace les tentatives`() {
+        val d = DepotCatalogue(File(dossierTemporaire.newFolder(), "cat.json"))
+        d.charger()                                   // vide : le cas le plus pressant
+        repeat(3) { d.noterEchec() }                  // retrait = 8 s
+        assertEquals(3, d.echecsConsecutifs)
+        assertFalse("le plancher ne suffit plus",
+            d.doitRafraichir(maintenantMs = DepotCatalogue.PLANCHER_MS,
+                             finDuDernierEssaiMs = 0))
+        assertTrue("passe le retrait, oui",
+            d.doitRafraichir(maintenantMs = PolitiqueEnvoi.attenteApresEchec(3),
+                             finDuDernierEssaiMs = 0))
+    }
+
+    @Test
+    fun `un succes remet le retrait a zero`() {
+        val d = depotAvecCatalogue()
+        repeat(5) { d.noterEchec() }
+        d.noterSucces(d.qrInconnusVus())
+        assertEquals(0, d.echecsConsecutifs)
+        assertTrue("le reseau est revenu : on repart au rythme normal",
+            d.doitRafraichir(versionServeur = 8,
+                             maintenantMs = DepotCatalogue.PLANCHER_MS,
+                             finDuDernierEssaiMs = 0))
+    }
+
+    @Test
+    fun `le retrait est plafonne, un telephone ne decroche jamais`() {
+        val d = DepotCatalogue(File(dossierTemporaire.newFolder(), "cat.json"))
+        d.charger()
+        repeat(50) { d.noterEchec() }
+        assertTrue("apres le plafond, on retente",
+            d.doitRafraichir(maintenantMs = PolitiqueEnvoi.RETRAIT_MAX_MS,
+                             finDuDernierEssaiMs = 0))
     }
 
     // --- La couleur du circuit (refonte visuelle) ---------------------------
